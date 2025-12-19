@@ -13,7 +13,6 @@ For the corresponding research and tools, see the [scorch-tools](https://github.
 | Role | Description |
 |------|-------------|
 | `disable_firewall` | Disable Windows Firewall on lab hosts |
-| `install_adcs` | Install AD Certificate Services for LDAPS |
 | `create_scorch_accounts` | Create service accounts and groups in AD |
 | `install_mgmt_server` | Install Management Server and create database |
 | `install_runbook_server` | Install additional Runbook Server |

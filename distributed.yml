@@ -47,7 +47,6 @@ ludus:
       fqdn: scorch.ludus.domain  # Do NOT use .local suffix - SCORCH has issues with it
       role: primary-dc
     roles:
-      - professor_moody.ludus_scorch.install_adcs
       - professor_moody.ludus_scorch.disable_firewall
       - professor_moody.ludus_scorch.create_scorch_accounts
     role_vars:
