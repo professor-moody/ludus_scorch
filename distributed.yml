@@ -82,7 +82,7 @@ ludus:
       - badsectorlabs.ludus_mssql
     role_vars:
       # SQL Server installation (auto-downloads, no ISO needed!)
-      ludus_mssql_version: "2022"
+      ludus_mssql_version: "2019"
       ludus_mssql_install_ssms: true
 
   # =============================================================================
