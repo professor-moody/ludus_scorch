@@ -26,31 +26,27 @@ For the corresponding research and tools, see the [scorch-tools](https://github.
 
 ## Installation in [Ludus](https://ludus.cloud)
 
+1. Add the required roles and collection to your Ludus server
+
 ```bash
-# Add the SQL Server role (auto-downloads SQL, no ISO needed)
-ludus ansible roles add badsectorlabs.ludus_mssql
+ludus ansible role add badsectorlabs.ludus_mssql
+ludus ansible collection add professor_moody.ludus_scorch
+```
 
-# Add the SCORCH collection from Ansible Galaxy
-ludus ansible collection add synzack.ludus_scorch
+2. Upload the SCORCH ISO to Ludus (SQL is auto-downloaded, no ISO needed!)
 
-# Or build from source
-git clone https://github.com/professor-moody/ludus_scorch
-cd ludus_scorch
-ansible-galaxy collection build
-python3 -m http.server 80
-ludus ansible collection add http://<your-ip>/synzack-ludus_scorch-1.0.0.tar.gz
-
-# Upload SCORCH ISO (SQL is auto-downloaded)
+```bash
 ludus range file-upload -f DVDSCORCH2022.iso
+```
 
-# Set your config
+3. Set your config and deploy
+
+```bash
 ludus range config set -f distributed.yml
-
-# Deploy
 ludus range deploy
-
-# Watch logs
-ludus range logs -f
+# Wait for the range to successfully deploy
+# You can watch the logs with `ludus range logs -f`
+# Or check the status with `ludus range status`
 ```
 
 ## Prerequisites
@@ -60,7 +56,7 @@ ludus range logs -f
 The collection depends on `badsectorlabs.ludus_mssql` for SQL Server installation (auto-downloads, no ISO needed):
 
 ```bash
-ludus ansible roles add badsectorlabs.ludus_mssql
+ludus ansible role add badsectorlabs.ludus_mssql
 ```
 
 ### Media Required

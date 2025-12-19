@@ -17,7 +17,7 @@
 # Prerequisites:
 #   1. Upload SCORCH 2022 ISO to Ludus file share
 #   2. Add the SQL role: ludus ansible roles add badsectorlabs.ludus_mssql
-#   3. Add the collection: ludus ansible collection add synzack.ludus_scorch
+#   3. Add the collection: ludus ansible collection add professor_moody.ludus_scorch
 #
 # Usage:
 #   ludus range config set -f single-server.yml
@@ -42,9 +42,9 @@ ludus:
       fqdn: scorch.ludus.domain
       role: primary-dc
     roles:
-      - synzack.ludus_scorch.install_adcs
-      - synzack.ludus_scorch.disable_firewall
-      - synzack.ludus_scorch.create_scorch_accounts
+      - professor_moody.ludus_scorch.install_adcs
+      - professor_moody.ludus_scorch.disable_firewall
+      - professor_moody.ludus_scorch.create_scorch_accounts
     role_vars:
       ludus_scorch_svc_account: "scorch_svc"
       ludus_scorch_svc_password: "ScorchP@ss123!"
@@ -72,13 +72,13 @@ ludus:
       fqdn: scorch.ludus.domain
       role: member
     roles:
-      - synzack.ludus_scorch.disable_firewall
-      - synzack.ludus_scorch.prereqs
+      - professor_moody.ludus_scorch.disable_firewall
+      - professor_moody.ludus_scorch.prereqs
       - badsectorlabs.ludus_mssql
-      - synzack.ludus_scorch.install_mgmt_server
-      - synzack.ludus_scorch.install_webservices
-      - synzack.ludus_scorch.create_variables
-      - synzack.ludus_scorch.create_runbooks
+      - professor_moody.ludus_scorch.install_mgmt_server
+      - professor_moody.ludus_scorch.install_webservices
+      - professor_moody.ludus_scorch.create_variables
+      - professor_moody.ludus_scorch.create_runbooks
     role_vars:
       # SQL Server (auto-downloads, no ISO needed!)
       ludus_mssql_version: "2022"
