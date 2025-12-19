@@ -6,7 +6,7 @@
 # for each role, mimicking enterprise deployments.
 #
 # Architecture:
-#   DC01           - Domain Controller with ADCS (for LDAPS)
+#   DC01           - Domain Controller
 #   SCORCH-SQL     - Dedicated SQL Server for Orchestrator database
 #   SCORCH-MGMT    - Management Server + Primary Runbook Server
 #   SCORCH-RB      - Additional Runbook Server (for HA/load distribution)
