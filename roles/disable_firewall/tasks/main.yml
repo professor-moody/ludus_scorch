@@ -28,3 +28,4 @@
     name: MpsSvc
     state: started
     start_mode: auto
+  ignore_errors: true
