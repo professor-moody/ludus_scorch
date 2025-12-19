@@ -19,7 +19,7 @@
 #
 # Prerequisites:
 #   1. Upload SCORCH 2022 ISO to Ludus file share
-#   2. Upload SQL Server 2022 ISO to Ludus file share
+#   2. Add the SQL role: ludus ansible roles add badsectorlabs.ludus_mssql
 #   3. Add the collection: ludus ansible collection add synzack.ludus_scorch
 #
 # Usage:
@@ -80,15 +80,11 @@ ludus:
     roles:
       - synzack.ludus_scorch.disable_firewall
       - synzack.ludus_scorch.prereqs
-      - synzack.ludus_scorch.install_sql
+      - badsectorlabs.ludus_mssql
     role_vars:
-      # SQL Server installation
-      ludus_scorch_sql_iso_path: "C:\\ludus\\SQLServer2022-x64-ENU.iso"
-      ludus_scorch_sql_instance_name: "MSSQLSERVER"
-      ludus_scorch_sql_sa_password: "SqlP@ssw0rd123!"
-      ludus_scorch_sql_collation: "SQL_Latin1_General_CP1_CI_AS"
-      ludus_scorch_sql_tcp_port: 1433
-      ludus_scorch_sql_open_firewall: true
+      # SQL Server installation (auto-downloads, no ISO needed!)
+      ludus_mssql_version: "2022"
+      ludus_mssql_install_ssms: true
 
   # =============================================================================
   # MANAGEMENT SERVER (Primary)
@@ -114,7 +110,7 @@ ludus:
       - synzack.ludus_scorch.install_mgmt_server
     role_vars:
       # SCORCH installation
-      ludus_scorch_iso_path: "C:\\ludus\\mu_system_center_2022_orchestrator_x64_dvd.iso"
+      ludus_scorch_iso_path: "C:\\ludus\\DVDSCORCH2022.iso"
       ludus_scorch_components: "ManagementServer,RunbookServer,RunbookDesigner"
       ludus_scorch_svc_account: "scorch_svc"
       ludus_scorch_svc_password: "ScorchP@ss123!"
@@ -149,7 +145,7 @@ ludus:
       - synzack.ludus_scorch.prereqs
       - synzack.ludus_scorch.install_runbook_server
     role_vars:
-      ludus_scorch_iso_path: "C:\\ludus\\mu_system_center_2022_orchestrator_x64_dvd.iso"
+      ludus_scorch_iso_path: "C:\\ludus\\DVDSCORCH2022.iso"
       ludus_scorch_components: "RunbookServer"
       ludus_scorch_svc_account: "scorch_svc"
       ludus_scorch_svc_password: "ScorchP@ss123!"
@@ -182,7 +178,7 @@ ludus:
       - synzack.ludus_scorch.create_variables
       - synzack.ludus_scorch.create_runbooks
     role_vars:
-      ludus_scorch_iso_path: "C:\\ludus\\mu_system_center_2022_orchestrator_x64_dvd.iso"
+      ludus_scorch_iso_path: "C:\\ludus\\DVDSCORCH2022.iso"
       ludus_scorch_components: "WebAPI,WebConsole"
       ludus_scorch_web_account: "scorch_web"
       ludus_scorch_web_password: "ScorchWebP@ss123!"

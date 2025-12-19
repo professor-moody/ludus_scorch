@@ -16,7 +16,7 @@
 #
 # Prerequisites:
 #   1. Upload SCORCH 2022 ISO to Ludus file share
-#   2. Upload SQL Server 2022 ISO to Ludus file share
+#   2. Add the SQL role: ludus ansible roles add badsectorlabs.ludus_mssql
 #   3. Add the collection: ludus ansible collection add synzack.ludus_scorch
 #
 # Usage:
@@ -74,18 +74,18 @@ ludus:
     roles:
       - synzack.ludus_scorch.disable_firewall
       - synzack.ludus_scorch.prereqs
-      - synzack.ludus_scorch.install_sql
+      - badsectorlabs.ludus_mssql
       - synzack.ludus_scorch.install_mgmt_server
       - synzack.ludus_scorch.install_webservices
       - synzack.ludus_scorch.create_variables
       - synzack.ludus_scorch.create_runbooks
     role_vars:
-      # SQL Server
-      ludus_scorch_sql_iso_path: "C:\\ludus\\SQLServer2022-x64-ENU.iso"
-      ludus_scorch_sql_sa_password: "SqlP@ssw0rd123!"
+      # SQL Server (auto-downloads, no ISO needed!)
+      ludus_mssql_version: "2022"
+      ludus_mssql_install_ssms: true
       
       # SCORCH
-      ludus_scorch_iso_path: "C:\\ludus\\mu_system_center_2022_orchestrator_x64_dvd.iso"
+      ludus_scorch_iso_path: "C:\\ludus\\DVDSCORCH2022.iso"
       ludus_scorch_components: "ManagementServer,RunbookServer,RunbookDesigner"
       ludus_scorch_svc_account: "scorch_svc"
       ludus_scorch_svc_password: "ScorchP@ss123!"

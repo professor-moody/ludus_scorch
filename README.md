@@ -16,17 +16,21 @@ For the corresponding research and tools, see the [scorch-tools](https://github.
 | `install_adcs` | Install AD Certificate Services for LDAPS |
 | `create_scorch_accounts` | Create service accounts and groups in AD |
 | `prereqs` | Install prerequisites (.NET, IIS, VC++ Redist) |
-| `install_sql` | Install SQL Server for Orchestrator database |
 | `install_mgmt_server` | Install Management Server and create database |
 | `install_runbook_server` | Install additional Runbook Server |
 | `install_webservices` | Install Web API and Orchestration Console |
 | `create_variables` | Create test encrypted variables for security testing |
 | `create_runbooks` | Create sample runbooks, folders, schedules, and configs |
 
+> **Note:** SQL Server is installed using `badsectorlabs.ludus_mssql` (auto-downloads, no ISO needed)
+
 ## Installation in [Ludus](https://ludus.cloud)
 
 ```bash
-# Add the collection from Ansible Galaxy
+# Add the SQL Server role (auto-downloads SQL, no ISO needed)
+ludus ansible roles add badsectorlabs.ludus_mssql
+
+# Add the SCORCH collection from Ansible Galaxy
 ludus ansible collection add synzack.ludus_scorch
 
 # Or build from source
@@ -35,6 +39,9 @@ cd ludus_scorch
 ansible-galaxy collection build
 python3 -m http.server 80
 ludus ansible collection add http://<your-ip>/synzack-ludus_scorch-1.0.0.tar.gz
+
+# Upload SCORCH ISO (SQL is auto-downloaded)
+ludus range file-upload -f DVDSCORCH2022.iso
 
 # Set your config
 ludus range config set -f distributed.yml
@@ -48,20 +55,54 @@ ludus range logs -f
 
 ## Prerequisites
 
-### Media Required
+### Required Roles
 
-Upload these ISOs to your Ludus file share before deployment:
-
-| Media | Filename (example) | Download |
-|-------|-------------------|----------|
-| System Center 2022 Orchestrator | `mu_system_center_2022_orchestrator_x64_dvd.iso` | VLSC / MSDN / Eval Center |
-| SQL Server 2022 | `SQLServer2022-x64-ENU.iso` | [Microsoft Download](https://www.microsoft.com/en-us/sql-server/sql-server-downloads) |
+The collection depends on `badsectorlabs.ludus_mssql` for SQL Server installation (auto-downloads, no ISO needed):
 
 ```bash
-# Upload to Ludus file share
-ludus range file-upload -f mu_system_center_2022_orchestrator_x64_dvd.iso
-ludus range file-upload -f SQLServer2022-x64-ENU.iso
+ludus ansible roles add badsectorlabs.ludus_mssql
 ```
+
+### Media Required
+
+Upload the SCORCH ISO to your Ludus file share before deployment:
+
+| Media | Filename (example) | Size | Download |
+|-------|-------------------|------|----------|
+| System Center 2022 Orchestrator | `DVDSCORCH2022.iso` | ~800MB | See below |
+
+### SCORCH Download Options
+
+**Option 1: Direct ISO Download (Recommended)**
+```
+https://go.microsoft.com/fwlink/p/?LinkID=2195531&clcid=0x409&culture=en-us&country=US
+```
+- 180-day evaluation, no product key required
+- ~800MB download
+
+**Option 2: Microsoft Evaluation Center**
+1. Go to [System Center 2022 Downloads](https://www.microsoft.com/en-us/evalcenter/download-system-center-2022)
+2. Click "System Center Orchestrator - 64-bit edition"
+
+**Option 3: Pre-built Evaluation VHD**
+- [Download VHD](https://www.microsoft.com/en-us/download/details.aspx?id=104039) (~15GB)
+- Pre-configured VM with SCORCH already installed
+- Good for quick testing without Ludus deployment
+
+**Option 4: Visual Studio Subscription / VLSC**
+- If you have VS subscription or Volume Licensing
+- Full retail ISO: `mu_system_center_2022_orchestrator_x64_dvd_*.iso`
+
+### Upload to Ludus
+
+```bash
+# Upload SCORCH ISO to Ludus file share
+ludus range file-upload -f DVDSCORCH2022.iso
+```
+
+The file will be available at `C:\ludus\` on Windows VMs.
+
+> **Note:** SQL Server is automatically downloaded by the `badsectorlabs.ludus_mssql` role - no ISO needed!
 
 ### Templates Required
 
@@ -160,8 +201,8 @@ After deployment, verify with [scorch-tools](https://github.com/professor-moody/
 # Enumerate with domain credentials
 ./scorch enum -t SCORCH-WEB.scorch.ludus.domain -d SCORCH -u domainadmin -p password -all
 
-# Extract credentials from database
-./scorch dump -t SCORCH-SQL.scorch.ludus.domain -db Orchestrator -u sa -p 'SqlP@ssw0rd123!' -all -decrypt
+# Extract credentials from database (using Windows auth via domain creds)
+./scorch dump -t SCORCH-SQL.scorch.ludus.domain -db Orchestrator -d SCORCH -u domainadmin -p password -all -decrypt
 
 # Pass-the-hash enumeration
 ./scorch enum -t SCORCH-WEB.scorch.ludus.domain -d SCORCH -u domainadmin -H <nthash> -all
@@ -177,7 +218,9 @@ After deployment, verify with [scorch-tools](https://github.com/professor-moody/
 | Domain Admin | `domainadmin` | `password` |
 | SCORCH Service | `scorch_svc` | `ScorchP@ss123!` |
 | SCORCH Web | `scorch_web` | `ScorchWebP@ss123!` |
-| SQL SA | `sa` | `SqlP@ssw0rd123!` |
+| SQL Server | Windows Auth | (uses domain accounts) |
+
+> **Note:** SQL Server is configured for Windows Authentication. SCORCH uses the service account to connect.
 
 ## Test Variables Created
 
