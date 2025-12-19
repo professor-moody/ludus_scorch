@@ -1,0 +1,134 @@
+# yaml-language-server: $schema=https://docs.ludus.cloud/schemas/range-config.json
+#
+# SCORCH Single Server Deployment - Quick Lab Setup
+# 
+# This configuration deploys a minimal SCORCH environment with all components
+# on a single server. Ideal for quick testing and tool development.
+#
+# Architecture:
+#   DC01         - Domain Controller with ADCS
+#   SCORCH       - All-in-One (SQL + Management + Runbook + Web Services)
+#   WS01         - Workstation (optional)
+#
+# VMs Required: 2-3
+# Total RAM: ~14GB recommended
+# Deployment Time: ~60 minutes
+#
+# Prerequisites:
+#   1. Upload SCORCH 2022 ISO to Ludus file share
+#   2. Upload SQL Server 2022 ISO to Ludus file share
+#   3. Add the collection: ludus ansible collection add synzack.ludus_scorch
+#
+# Usage:
+#   ludus range config set -f single-server.yml
+#   ludus range deploy
+#
+
+ludus:
+  # =============================================================================
+  # DOMAIN CONTROLLER
+  # =============================================================================
+  - vm_name: "{{ range_id }}-DC01"
+    hostname: "DC01"
+    template: win2022-server-x64-template
+    vlan: 10
+    ip_last_octet: 10
+    ram_gb: 4
+    ram_min_gb: 2
+    cpus: 2
+    windows:
+      sysprep: true
+    domain:
+      fqdn: scorch.ludus.domain
+      role: primary-dc
+    roles:
+      - synzack.ludus_scorch.install_adcs
+      - synzack.ludus_scorch.disable_firewall
+      - synzack.ludus_scorch.create_scorch_accounts
+    role_vars:
+      ludus_scorch_svc_account: "scorch_svc"
+      ludus_scorch_svc_password: "ScorchP@ss123!"
+      ludus_scorch_web_account: "scorch_svc"
+      ludus_scorch_web_password: "ScorchP@ss123!"
+      ludus_scorch_users_group: "OrchestratorUsers"
+      ludus_scorch_admins_group: "OrchestratorAdmins"
+
+  # =============================================================================
+  # SCORCH ALL-IN-ONE SERVER
+  # =============================================================================
+  - vm_name: "{{ range_id }}-SCORCH"
+    hostname: "SCORCH"
+    template: win2022-server-x64-template
+    vlan: 10
+    ip_last_octet: 20
+    ram_gb: 8
+    ram_min_gb: 4
+    cpus: 4
+    windows:
+      sysprep: true
+      autologon_user: domainadmin
+      autologon_password: password
+    domain:
+      fqdn: scorch.ludus.domain
+      role: member
+    roles:
+      - synzack.ludus_scorch.disable_firewall
+      - synzack.ludus_scorch.prereqs
+      - synzack.ludus_scorch.install_sql
+      - synzack.ludus_scorch.install_mgmt_server
+      - synzack.ludus_scorch.install_webservices
+      - synzack.ludus_scorch.create_variables
+      - synzack.ludus_scorch.create_runbooks
+    role_vars:
+      # SQL Server
+      ludus_scorch_sql_iso_path: "C:\\ludus\\SQLServer2022-x64-ENU.iso"
+      ludus_scorch_sql_sa_password: "SqlP@ssw0rd123!"
+      
+      # SCORCH
+      ludus_scorch_iso_path: "C:\\ludus\\mu_system_center_2022_orchestrator_x64_dvd.iso"
+      ludus_scorch_components: "ManagementServer,RunbookServer,RunbookDesigner"
+      ludus_scorch_svc_account: "scorch_svc"
+      ludus_scorch_svc_password: "ScorchP@ss123!"
+      ludus_scorch_web_account: "scorch_svc"
+      ludus_scorch_web_password: "ScorchP@ss123!"
+      
+      # Database (local)
+      ludus_scorch_db_server: "localhost"
+      ludus_scorch_db_name: "Orchestrator"
+      ludus_scorch_db_create_new: true
+      ludus_scorch_db_use_windows_auth: true
+      ludus_scorch_db_trust_cert: true
+      
+      # Web services
+      ludus_scorch_api_port: 81
+      ludus_scorch_console_port: 82
+      
+      # Security testing
+      ludus_scorch_enable_anonymous_access: false
+      ludus_scorch_disable_ntlm_channel_binding: true
+      ludus_scorch_create_default_vars: true
+      # Create sample runbooks
+      ludus_scorch_create_default_runbooks: true
+      ludus_scorch_users_group: "OrchestratorUsers"
+
+  # =============================================================================
+  # WORKSTATION (Optional)
+  # =============================================================================
+  - vm_name: "{{ range_id }}-WS01"
+    hostname: "WS01"
+    template: win11-22h2-x64-enterprise-template
+    vlan: 10
+    ip_last_octet: 50
+    ram_gb: 4
+    ram_min_gb: 2
+    cpus: 2
+    windows:
+      sysprep: true
+      install_additional_tools: true
+    domain:
+      fqdn: scorch.ludus.domain
+      role: member
+
+network:
+  inter_vlan_default: allow
+  external_default: allow

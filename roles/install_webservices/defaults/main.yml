@@ -1,0 +1,41 @@
+---
+# SCORCH Web Services Installation Configuration
+
+# SCORCH ISO path
+ludus_scorch_iso_path: ""  # Set via role_vars
+
+# Components to install
+ludus_scorch_components: "WebAPI,WebConsole"
+
+# Service account (domain\username will be built)
+ludus_scorch_web_account: "scorch_web"
+ludus_scorch_web_password: "ScorchWebP@ss123!"
+
+# Database configuration (existing database)
+ludus_scorch_db_server: ""  # Required - hostname of SQL server
+ludus_scorch_db_instance: ""  # Optional - instance name
+ludus_scorch_db_name: "Orchestrator"
+ludus_scorch_db_use_windows_auth: true
+ludus_scorch_db_trust_cert: true
+
+# Web Service Ports
+ludus_scorch_api_port: 81
+ludus_scorch_console_port: 82
+
+# Public URLs (used for CORS configuration)
+# Leave empty to auto-generate from hostname
+ludus_scorch_api_public_url: ""
+ludus_scorch_console_public_url: ""
+
+# Microsoft Update
+ludus_scorch_use_microsoft_update: false
+
+# Telemetry
+ludus_scorch_send_telemetry: false
+
+# Error reporting
+ludus_scorch_error_reporting: "never"
+
+# Security testing options
+ludus_scorch_enable_anonymous_access: false
+ludus_scorch_disable_ntlm_channel_binding: true

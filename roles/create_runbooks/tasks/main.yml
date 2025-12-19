@@ -1,0 +1,346 @@
+---
+# Create sample runbooks in SCORCH for realistic testing
+
+- name: Set database connection string
+  ansible.builtin.set_fact:
+    ludus_scorch_db_connection: "{{ ludus_scorch_db_server }}{% if ludus_scorch_db_instance | length > 0 %}\\{{ ludus_scorch_db_instance }}{% endif %}"
+
+- name: Wait for database connectivity
+  ansible.windows.win_shell: |
+    $retries = 0
+    while ($retries -lt 30) {
+      try {
+        $conn = New-Object System.Data.SqlClient.SqlConnection
+        $conn.ConnectionString = "Server={{ ludus_scorch_db_connection }};Database={{ ludus_scorch_db_name }};Integrated Security=True;TrustServerCertificate={{ ludus_scorch_db_trust_cert }}"
+        $conn.Open()
+        $conn.Close()
+        Write-Output "Connected"
+        exit 0
+      } catch {
+        Start-Sleep -Seconds 10
+        $retries++
+      }
+    }
+    exit 1
+  register: db_ready
+  changed_when: false
+
+- name: Create runbook management script
+  ansible.windows.win_copy:
+    content: |
+      # SCORCH Runbook Management Script
+      # Creates folders, runbooks, and schedules for testing
+      
+      param(
+        [string]$DbServer = "{{ ludus_scorch_db_connection }}",
+        [string]$DbName = "{{ ludus_scorch_db_name }}",
+        [string]$Action = "CreateAll"
+      )
+      
+      $ErrorActionPreference = "Stop"
+      $connectionString = "Server=$DbServer;Database=$DbName;Integrated Security=True;TrustServerCertificate=True"
+      
+      function Get-DbConnection {
+        $conn = New-Object System.Data.SqlClient.SqlConnection($connectionString)
+        $conn.Open()
+        return $conn
+      }
+      
+      function Get-OrCreateFolder {
+        param(
+          [System.Data.SqlClient.SqlConnection]$Connection,
+          [string]$FolderPath,
+          [string]$RootParentId = '00000000-0000-0000-0000-000000000000'  # Runbooks root
+        )
+        
+        $folderParts = $FolderPath -split '\\'
+        $parentId = $RootParentId
+        
+        foreach ($folderName in $folderParts) {
+          if ([string]::IsNullOrWhiteSpace($folderName)) { continue }
+          
+          # Check if folder exists
+          $cmd = $Connection.CreateCommand()
+          $cmd.CommandText = "SELECT UniqueID FROM [dbo].[FOLDERS] WHERE Name = @Name AND ParentID = @ParentId AND Deleted = 0"
+          $cmd.Parameters.AddWithValue("@Name", $folderName) | Out-Null
+          $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
+          $existingId = $cmd.ExecuteScalar()
+          
+          if ($existingId) {
+            $parentId = $existingId
+          } else {
+            # Create folder
+            $newId = [System.Guid]::NewGuid().ToString()
+            $cmd = $Connection.CreateCommand()
+            $cmd.CommandText = @"
+              INSERT INTO [dbo].[FOLDERS] (UniqueID, ParentID, Name, Description, Deleted, LastModified)
+              VALUES (@Id, @ParentId, @Name, '', 0, GETUTCDATE())
+      "@
+            $cmd.Parameters.AddWithValue("@Id", $newId) | Out-Null
+            $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
+            $cmd.Parameters.AddWithValue("@Name", $folderName) | Out-Null
+            $cmd.ExecuteNonQuery() | Out-Null
+            $parentId = $newId
+            Write-Output "Created folder: $folderName"
+          }
+        }
+        
+        return $parentId
+      }
+      
+      function New-Runbook {
+        param(
+          [System.Data.SqlClient.SqlConnection]$Connection,
+          [string]$Name,
+          [string]$FolderPath,
+          [string]$Description = "",
+          [bool]$UsesCredentials = $false
+        )
+        
+        # Get or create folder
+        $folderId = Get-OrCreateFolder -Connection $Connection -FolderPath $FolderPath
+        
+        # Check if runbook already exists
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = "SELECT UniqueID FROM [dbo].[POLICIES] WHERE Name = @Name AND ParentID = @ParentId AND Deleted = 0"
+        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
+        $cmd.Parameters.AddWithValue("@ParentId", $folderId) | Out-Null
+        $existingId = $cmd.ExecuteScalar()
+        
+        if ($existingId) {
+          Write-Output "Runbook already exists: $Name"
+          return $existingId
+        }
+        
+        # Create runbook (policy)
+        $runbookId = [System.Guid]::NewGuid().ToString()
+        
+        # Create a basic runbook XML structure
+        $runbookXml = @"
+      <?xml version="1.0" encoding="utf-8"?>
+      <Policy xmlns="http://schemas.microsoft.com/SystemCenter/Orchestrator/2007/11/Policy">
+        <Name>$Name</Name>
+        <Description>$Description</Description>
+        <Activities>
+          <Activity>
+            <Name>Initialize Data</Name>
+            <Type>Initialize Data</Type>
+            <X>100</X>
+            <Y>100</Y>
+          </Activity>
+        </Activities>
+        <Links />
+      </Policy>
+      "@
+        
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = @"
+          INSERT INTO [dbo].[POLICIES] 
+          (UniqueID, ParentID, Name, Description, PolicyXML, CheckedOutBy, CheckedOutTime, Deleted, LastModified, Version)
+          VALUES 
+          (@Id, @ParentId, @Name, @Description, @PolicyXML, NULL, NULL, 0, GETUTCDATE(), 1)
+      "@
+        $cmd.Parameters.AddWithValue("@Id", $runbookId) | Out-Null
+        $cmd.Parameters.AddWithValue("@ParentId", $folderId) | Out-Null
+        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
+        $cmd.Parameters.AddWithValue("@Description", $Description) | Out-Null
+        $cmd.Parameters.AddWithValue("@PolicyXML", $runbookXml) | Out-Null
+        $cmd.ExecuteNonQuery() | Out-Null
+        
+        Write-Output "Created runbook: $Name in $FolderPath"
+        return $runbookId
+      }
+      
+      function New-Schedule {
+        param(
+          [System.Data.SqlClient.SqlConnection]$Connection,
+          [string]$Name,
+          [string]$Pattern,
+          [string]$Time = "06:00",
+          [string]$Day = "Monday"
+        )
+        
+        # Check if schedule exists
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = "SELECT UniqueID FROM [dbo].[SCHEDULES] WHERE Name = @Name"
+        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
+        $existingId = $cmd.ExecuteScalar()
+        
+        if ($existingId) {
+          Write-Output "Schedule already exists: $Name"
+          return $existingId
+        }
+        
+        $scheduleId = [System.Guid]::NewGuid().ToString()
+        
+        # Build schedule XML based on pattern
+        $scheduleXml = switch ($Pattern) {
+          "daily" { "<Schedule><Pattern>Daily</Pattern><Time>$Time</Time></Schedule>" }
+          "weekly" { "<Schedule><Pattern>Weekly</Pattern><DayOfWeek>$Day</DayOfWeek><Time>$Time</Time></Schedule>" }
+          "hourly" { "<Schedule><Pattern>Hourly</Pattern><Interval>1</Interval></Schedule>" }
+          default { "<Schedule><Pattern>Daily</Pattern><Time>$Time</Time></Schedule>" }
+        }
+        
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = @"
+          INSERT INTO [dbo].[SCHEDULES] (UniqueID, Name, Description, ScheduleXML, Deleted, LastModified)
+          VALUES (@Id, @Name, '', @ScheduleXML, 0, GETUTCDATE())
+      "@
+        $cmd.Parameters.AddWithValue("@Id", $scheduleId) | Out-Null
+        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
+        $cmd.Parameters.AddWithValue("@ScheduleXML", $scheduleXml) | Out-Null
+        $cmd.ExecuteNonQuery() | Out-Null
+        
+        Write-Output "Created schedule: $Name"
+        return $scheduleId
+      }
+      
+      function New-GlobalConfiguration {
+        param(
+          [System.Data.SqlClient.SqlConnection]$Connection,
+          [string]$Name,
+          [string]$Value,
+          [string]$Category = "Custom"
+        )
+        
+        # Check if config exists
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = "SELECT UniqueID FROM [dbo].[GLOBALCONFIGURATIONS] WHERE Name = @Name"
+        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
+        $existingId = $cmd.ExecuteScalar()
+        
+        if ($existingId) {
+          # Update existing
+          $cmd = $Connection.CreateCommand()
+          $cmd.CommandText = "UPDATE [dbo].[GLOBALCONFIGURATIONS] SET Value = @Value WHERE UniqueID = @Id"
+          $cmd.Parameters.AddWithValue("@Value", $Value) | Out-Null
+          $cmd.Parameters.AddWithValue("@Id", $existingId) | Out-Null
+          $cmd.ExecuteNonQuery() | Out-Null
+          Write-Output "Updated config: $Name"
+          return $existingId
+        }
+        
+        $configId = [System.Guid]::NewGuid().ToString()
+        
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = @"
+          INSERT INTO [dbo].[GLOBALCONFIGURATIONS] (UniqueID, Name, Value, Category, Deleted, LastModified)
+          VALUES (@Id, @Name, @Value, @Category, 0, GETUTCDATE())
+      "@
+        $cmd.Parameters.AddWithValue("@Id", $configId) | Out-Null
+        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
+        $cmd.Parameters.AddWithValue("@Value", $Value) | Out-Null
+        $cmd.Parameters.AddWithValue("@Category", $Category) | Out-Null
+        $cmd.ExecuteNonQuery() | Out-Null
+        
+        Write-Output "Created config: $Name"
+        return $configId
+      }
+      
+      # Main execution
+      $conn = Get-DbConnection
+      
+      try {
+        Write-Output "=== Creating Runbook Infrastructure ==="
+        Write-Output ""
+        
+        # Will be populated by Ansible template
+        {{ ludus_scorch_runbook_creation_commands }}
+        
+        Write-Output ""
+        Write-Output "=== Runbook Infrastructure Created ==="
+        
+      } finally {
+        $conn.Close()
+      }
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\Create-Runbooks.ps1"
+
+- name: Build runbook creation commands
+  ansible.builtin.set_fact:
+    ludus_scorch_runbook_creation_commands: |
+      # Create folder structure
+      {% for folder in ludus_scorch_runbook_folders %}
+      Get-OrCreateFolder -Connection $conn -FolderPath "{{ folder.name }}"
+      {% for subfolder in folder.subfolders | default([]) %}
+      Get-OrCreateFolder -Connection $conn -FolderPath "{{ folder.name }}\\{{ subfolder }}"
+      {% endfor %}
+      {% endfor %}
+      
+      # Create sample runbooks
+      {% for runbook in ludus_scorch_sample_runbooks %}
+      New-Runbook -Connection $conn -Name "{{ runbook.name }}" -FolderPath "{{ runbook.folder }}" -Description "{{ runbook.description }}" -UsesCredentials ${{ runbook.uses_credentials | default(false) | lower }}
+      {% endfor %}
+      
+      # Create schedules
+      {% for schedule in ludus_scorch_schedules %}
+      New-Schedule -Connection $conn -Name "{{ schedule.name }}" -Pattern "{{ schedule.pattern }}" {% if schedule.time is defined %}-Time "{{ schedule.time }}"{% endif %} {% if schedule.day is defined %}-Day "{{ schedule.day }}"{% endif %}
+      {% endfor %}
+      
+      # Create global configurations (simulating Integration Pack settings)
+      New-GlobalConfiguration -Connection $conn -Name "SCOM_ManagementServer" -Value "scom-mgmt.corp.local" -Category "SCOM"
+      New-GlobalConfiguration -Connection $conn -Name "SCOM_RunAsAccount" -Value "CORP\\scom_action" -Category "SCOM"
+      New-GlobalConfiguration -Connection $conn -Name "Exchange_Server" -Value "exchange.corp.local" -Category "Exchange"
+      New-GlobalConfiguration -Connection $conn -Name "Exchange_AdminAccount" -Value "CORP\\exch_admin" -Category "Exchange"
+      New-GlobalConfiguration -Connection $conn -Name "ServiceNow_Instance" -Value "corpinc.service-now.com" -Category "ServiceNow"
+      New-GlobalConfiguration -Connection $conn -Name "ServiceNow_Username" -Value "api_orchestrator" -Category "ServiceNow"
+      New-GlobalConfiguration -Connection $conn -Name "VMware_vCenter" -Value "vcenter.corp.local" -Category "VMware"
+      New-GlobalConfiguration -Connection $conn -Name "VMware_Username" -Value "svc_orchestrator@vsphere.local" -Category "VMware"
+      New-GlobalConfiguration -Connection $conn -Name "Azure_TenantId" -Value "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Category "Azure"
+      New-GlobalConfiguration -Connection $conn -Name "Azure_SubscriptionId" -Value "12345678-abcd-ef12-3456-7890abcdef12" -Category "Azure"
+      New-GlobalConfiguration -Connection $conn -Name "AWS_Region" -Value "us-east-1" -Category "AWS"
+      New-GlobalConfiguration -Connection $conn -Name "AWS_AccountId" -Value "123456789012" -Category "AWS"
+
+- name: Update script with runbook commands
+  ansible.windows.win_shell: |
+    $scriptPath = "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\Create-Runbooks.ps1"
+    $content = Get-Content $scriptPath -Raw
+    $commands = @'
+    {{ ludus_scorch_runbook_creation_commands }}
+    '@
+    $content = $content -replace '\{\{ ludus_scorch_runbook_creation_commands \}\}', $commands
+    Set-Content -Path $scriptPath -Value $content
+  when: ludus_scorch_create_default_runbooks
+
+- name: Execute runbook creation script
+  ansible.windows.win_shell: |
+    & "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\Create-Runbooks.ps1"
+  register: runbook_creation
+  when: ludus_scorch_create_default_runbooks
+
+- name: Display runbook creation results
+  ansible.builtin.debug:
+    msg: "{{ runbook_creation.stdout_lines }}"
+  when: runbook_creation.stdout_lines is defined
+
+- name: Count created runbooks
+  ansible.windows.win_shell: |
+    $conn = New-Object System.Data.SqlClient.SqlConnection
+    $conn.ConnectionString = "Server={{ ludus_scorch_db_connection }};Database={{ ludus_scorch_db_name }};Integrated Security=True;TrustServerCertificate=True"
+    $conn.Open()
+    
+    $cmd = $conn.CreateCommand()
+    $cmd.CommandText = @"
+      SELECT 
+        (SELECT COUNT(*) FROM [dbo].[FOLDERS] WHERE Deleted = 0) as Folders,
+        (SELECT COUNT(*) FROM [dbo].[POLICIES] WHERE Deleted = 0) as Runbooks,
+        (SELECT COUNT(*) FROM [dbo].[SCHEDULES] WHERE Deleted = 0) as Schedules,
+        (SELECT COUNT(*) FROM [dbo].[GLOBALCONFIGURATIONS] WHERE Deleted = 0) as Configs
+    "@
+    
+    $reader = $cmd.ExecuteReader()
+    if ($reader.Read()) {
+      Write-Output "Folders: $($reader['Folders'])"
+      Write-Output "Runbooks: $($reader['Runbooks'])"
+      Write-Output "Schedules: $($reader['Schedules'])"
+      Write-Output "Global Configs: $($reader['Configs'])"
+    }
+    $reader.Close()
+    $conn.Close()
+  register: scorch_counts
+  changed_when: false
+
+- name: Display SCORCH object counts
+  ansible.builtin.debug:
+    msg: |
+      SCORCH Environment Summary:
+      {{ scorch_counts.stdout }}

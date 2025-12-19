@@ -1,0 +1,27 @@
+---
+# SCORCH Service Accounts Configuration
+
+# Main service account for Management and Runbook servers
+ludus_scorch_svc_account: "scorch_svc"
+ludus_scorch_svc_password: "ScorchP@ss123!"
+
+# Web service account (IIS App Pool identity)
+ludus_scorch_web_account: "scorch_web"
+ludus_scorch_web_password: "ScorchWebP@ss123!"
+
+# SQL Service account (if using dedicated)
+ludus_scorch_sql_account: "scorch_sql"
+ludus_scorch_sql_password: "ScorchSqlP@ss123!"
+
+# Orchestrator Users Group - members can use Runbook Designer
+ludus_scorch_users_group: "OrchestratorUsers"
+
+# Orchestrator Admins Group - full admin access
+ludus_scorch_admins_group: "OrchestratorAdmins"
+
+# Additional users to add to Orchestrator groups
+ludus_scorch_additional_admins: []
+ludus_scorch_additional_users: []
+
+# Domain admin to add (uses Ludus default)
+ludus_scorch_domain_admin: "domainadmin"

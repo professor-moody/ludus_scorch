@@ -1,0 +1,229 @@
+---
+# Install SCORCH Web API and Console
+
+- name: Set computed variables
+  ansible.builtin.set_fact:
+    ludus_scorch_web_account_full: "{{ ludus_domain_netbios_name | default('YOURNAMESPACE') }}\\{{ ludus_scorch_web_account }}"
+    ludus_scorch_db_connection: "{{ ludus_scorch_db_server }}{% if ludus_scorch_db_instance | length > 0 %}\\{{ ludus_scorch_db_instance }}{% endif %}"
+    ludus_scorch_api_url: "{{ ludus_scorch_api_public_url | default('http://' + ansible_fqdn + ':' + ludus_scorch_api_port | string) }}"
+    ludus_scorch_console_url: "{{ ludus_scorch_console_public_url | default('http://' + ansible_fqdn + ':' + ludus_scorch_console_port | string) }}"
+
+- name: Create temp directory
+  ansible.windows.win_file:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}"
+    state: directory
+
+- name: Check if SCORCH Web Services are already installed
+  ansible.windows.win_shell: |
+    $site = Get-Website -Name "Microsoft System Center*Orchestrator*" -ErrorAction SilentlyContinue
+    if ($site) { Write-Output "installed" } else { Write-Output "not_installed" }
+  register: scorch_web_check
+  changed_when: false
+
+- name: Skip installation if already installed
+  ansible.builtin.debug:
+    msg: "SCORCH Web Services are already installed"
+  when: scorch_web_check.stdout | trim == "installed"
+
+- name: Check if SCORCH ISO exists
+  ansible.windows.win_stat:
+    path: "{{ ludus_scorch_iso_path }}"
+  register: scorch_iso_stat
+  when: scorch_web_check.stdout | trim == "not_installed"
+
+- name: Fail if SCORCH ISO not found
+  ansible.builtin.fail:
+    msg: "SCORCH ISO not found at {{ ludus_scorch_iso_path }}"
+  when:
+    - scorch_web_check.stdout | trim == "not_installed"
+    - not scorch_iso_stat.stat.exists | default(false)
+
+- name: Mount SCORCH ISO
+  community.windows.win_disk_image:
+    image_path: "{{ ludus_scorch_iso_path }}"
+    state: present
+  register: scorch_iso_mount
+  when: scorch_web_check.stdout | trim == "not_installed"
+
+- name: Set SCORCH setup path
+  ansible.builtin.set_fact:
+    ludus_scorch_setup_path: "{{ scorch_iso_mount.mount_paths[0] }}SetupOrchestrator.exe"
+  when: scorch_iso_mount.mount_paths is defined
+
+- name: Add web service account to local Administrators
+  ansible.windows.win_group_membership:
+    name: Administrators
+    members:
+      - "{{ ludus_scorch_web_account_full }}"
+    state: present
+  failed_when: false
+
+- name: Grant Log on as a Service right
+  ansible.windows.win_user_right:
+    name: SeServiceLogonRight
+    users:
+      - "{{ ludus_scorch_web_account_full }}"
+    action: add
+
+- name: Grant IIS Metabase permissions
+  ansible.windows.win_shell: |
+    $path = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\aspnet_regiis.exe"
+    if (Test-Path $path) {
+      & $path -ga "{{ ludus_scorch_web_account_full }}"
+    }
+  failed_when: false
+
+- name: Install SCORCH Web API Service
+  ansible.windows.win_shell: |
+    $ErrorActionPreference = "Stop"
+    $env:SEE_MASK_NOZONECHECKS = 1
+    
+    $args = @(
+      '/Silent',
+      '/ServiceUserName:{{ ludus_scorch_web_account_full }}',
+      '/ServicePassword:{{ ludus_scorch_web_password }}',
+      '/Components:WebAPI',
+      '/DbServer:{{ ludus_scorch_db_connection }}',
+      '/DbNameExisting:{{ ludus_scorch_db_name }}',
+      '/TrustServerCertificate:{{ ludus_scorch_db_trust_cert | lower }}',
+      '/WebServicePort:{{ ludus_scorch_api_port }}',
+      '/WebConsolePublicUrl:"{{ ludus_scorch_console_url }}"',
+      '/UseMicrosoftUpdate:{% if ludus_scorch_use_microsoft_update %}1{% else %}0{% endif %}',
+      '/SendTelemetryReports:{% if ludus_scorch_send_telemetry %}1{% else %}0{% endif %}',
+      '/EnableErrorReporting:{{ ludus_scorch_error_reporting }}'
+    )
+    
+    Write-Output "Installing SCORCH Web API..."
+    
+    $process = Start-Process -FilePath "{{ ludus_scorch_setup_path }}" `
+      -ArgumentList $args `
+      -Wait -PassThru -NoNewWindow
+    
+    if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
+      Write-Output "Web API installed successfully"
+      exit 0
+    } else {
+      Write-Error "Installation failed with exit code: $($process.ExitCode)"
+      exit $process.ExitCode
+    }
+  when: scorch_web_check.stdout | trim == "not_installed"
+  register: webapi_install
+  async: 1800
+  poll: 60
+
+- name: Install SCORCH Orchestration Console
+  ansible.windows.win_shell: |
+    $ErrorActionPreference = "Stop"
+    $env:SEE_MASK_NOZONECHECKS = 1
+    
+    $args = @(
+      '/Silent',
+      '/ServiceUserName:{{ ludus_scorch_web_account_full }}',
+      '/ServicePassword:{{ ludus_scorch_web_password }}',
+      '/Components:WebConsole',
+      '/WebConsolePort:{{ ludus_scorch_console_port }}',
+      '/WebServicePublicUrl:"{{ ludus_scorch_api_url }}"',
+      '/UseMicrosoftUpdate:{% if ludus_scorch_use_microsoft_update %}1{% else %}0{% endif %}',
+      '/SendTelemetryReports:{% if ludus_scorch_send_telemetry %}1{% else %}0{% endif %}',
+      '/EnableErrorReporting:{{ ludus_scorch_error_reporting }}'
+    )
+    
+    Write-Output "Installing SCORCH Orchestration Console..."
+    
+    $process = Start-Process -FilePath "{{ ludus_scorch_setup_path }}" `
+      -ArgumentList $args `
+      -Wait -PassThru -NoNewWindow
+    
+    if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
+      Write-Output "Console installed successfully"
+      exit 0
+    } else {
+      Write-Error "Installation failed with exit code: $($process.ExitCode)"
+      exit $process.ExitCode
+    }
+  when: scorch_web_check.stdout | trim == "not_installed"
+  register: console_install
+  async: 1800
+  poll: 60
+
+- name: Unmount SCORCH ISO
+  community.windows.win_disk_image:
+    image_path: "{{ ludus_scorch_iso_path }}"
+    state: absent
+  when: scorch_iso_mount.mount_paths is defined
+
+- name: Configure anonymous access for testing
+  ansible.windows.win_shell: |
+    Import-Module WebAdministration
+    
+    # Find the SCORCH web site
+    $site = Get-Website | Where-Object { $_.Name -like "*Orchestrator*Web*" } | Select-Object -First 1
+    
+    if ($site) {
+      $sitePath = "IIS:\Sites\$($site.Name)"
+      
+      # Enable anonymous authentication
+      Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
+        -Name "enabled" -Value $true -PSPath $sitePath
+      
+      # Disable Windows authentication
+      Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication" `
+        -Name "enabled" -Value $false -PSPath $sitePath
+      
+      Write-Output "Anonymous access enabled for $($site.Name)"
+    }
+  when: ludus_scorch_enable_anonymous_access
+
+- name: Configure NTLM without channel binding (for relay testing)
+  ansible.windows.win_shell: |
+    # Disable Extended Protection for Authentication (EPA) on IIS
+    Import-Module WebAdministration
+    
+    $site = Get-Website | Where-Object { $_.Name -like "*Orchestrator*Web*" } | Select-Object -First 1
+    
+    if ($site) {
+      $sitePath = "IIS:\Sites\$($site.Name)"
+      
+      # Disable Extended Protection
+      Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication/extendedProtection" `
+        -Name "tokenChecking" -Value "None" -PSPath $sitePath -ErrorAction SilentlyContinue
+      
+      Write-Output "NTLM channel binding disabled for relay testing"
+    }
+  when: ludus_scorch_disable_ntlm_channel_binding
+  failed_when: false
+
+- name: Open firewall ports for web services
+  community.windows.win_firewall_rule:
+    name: "SCORCH {{ item.name }}"
+    localport: "{{ item.port }}"
+    action: allow
+    direction: in
+    protocol: tcp
+    state: present
+    enabled: true
+  loop:
+    - { name: "Web API", port: "{{ ludus_scorch_api_port }}" }
+    - { name: "Console", port: "{{ ludus_scorch_console_port }}" }
+
+- name: Restart IIS
+  ansible.windows.win_shell: iisreset /restart
+  failed_when: false
+
+- name: Verify Web API is accessible
+  ansible.windows.win_uri:
+    url: "http://localhost:{{ ludus_scorch_api_port }}/Orchestrator2012/Orchestrator.svc/"
+    method: GET
+    status_code: [200, 401]
+  register: api_check
+  retries: 10
+  delay: 15
+  until: api_check.status_code in [200, 401]
+
+- name: Display installation status
+  ansible.builtin.debug:
+    msg: |
+      SCORCH Web Services Installation Complete
+      Web API URL: {{ ludus_scorch_api_url }}
+      Console URL: {{ ludus_scorch_console_url }}
+      Anonymous Access: {{ ludus_scorch_enable_anonymous_access }}

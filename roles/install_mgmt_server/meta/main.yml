@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  author: Keys
+  description: Install SCORCH Management Server and create Orchestrator database
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Windows
+      versions:
+        - "2019"
+        - "2022"
+  galaxy_tags:
+    - windows
+    - scorch
+    - orchestrator
+    - management
+
+dependencies:
+  - role: prereqs

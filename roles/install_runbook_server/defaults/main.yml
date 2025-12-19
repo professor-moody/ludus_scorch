@@ -1,0 +1,28 @@
+---
+# SCORCH Runbook Server Installation Configuration
+
+# SCORCH ISO path
+ludus_scorch_iso_path: ""  # Set via role_vars
+
+# Components to install
+ludus_scorch_components: "RunbookServer"
+
+# Service account (domain\username will be built)
+ludus_scorch_svc_account: "scorch_svc"
+ludus_scorch_svc_password: "ScorchP@ss123!"
+
+# Database configuration (existing database)
+ludus_scorch_db_server: ""  # Required - hostname of SQL server
+ludus_scorch_db_instance: ""  # Optional - instance name
+ludus_scorch_db_name: "Orchestrator"
+ludus_scorch_db_use_windows_auth: true
+ludus_scorch_db_trust_cert: true
+
+# Microsoft Update
+ludus_scorch_use_microsoft_update: false
+
+# Telemetry
+ludus_scorch_send_telemetry: false
+
+# Error reporting
+ludus_scorch_error_reporting: "never"

@@ -1,0 +1,243 @@
+# yaml-language-server: $schema=https://docs.ludus.cloud/schemas/range-config.json
+#
+# SCORCH Distributed Deployment - Production-Like Architecture
+# 
+# This configuration deploys a realistic SCORCH environment with separate servers
+# for each role, mimicking enterprise deployments.
+#
+# Architecture:
+#   DC01           - Domain Controller with ADCS (for LDAPS)
+#   SCORCH-SQL     - Dedicated SQL Server for Orchestrator database
+#   SCORCH-MGMT    - Management Server + Primary Runbook Server
+#   SCORCH-RB      - Additional Runbook Server (for HA/load distribution)
+#   SCORCH-WEB     - Web API + Orchestration Console
+#   WS01           - Workstation for Runbook Designer access
+#
+# VMs Required: 6
+# Total RAM: ~28GB recommended
+# Deployment Time: ~90 minutes
+#
+# Prerequisites:
+#   1. Upload SCORCH 2022 ISO to Ludus file share
+#   2. Upload SQL Server 2022 ISO to Ludus file share
+#   3. Add the collection: ludus ansible collection add synzack.ludus_scorch
+#
+# Usage:
+#   ludus range config set -f distributed.yml
+#   ludus range deploy
+#   ludus range logs -f
+#
+
+ludus:
+  # =============================================================================
+  # DOMAIN CONTROLLER
+  # =============================================================================
+  - vm_name: "{{ range_id }}-DC01"
+    hostname: "DC01"
+    template: win2022-server-x64-template
+    vlan: 10
+    ip_last_octet: 10
+    ram_gb: 4
+    ram_min_gb: 2
+    cpus: 2
+    windows:
+      sysprep: true
+    domain:
+      fqdn: scorch.ludus.domain  # Do NOT use .local suffix - SCORCH has issues with it
+      role: primary-dc
+    roles:
+      - synzack.ludus_scorch.install_adcs
+      - synzack.ludus_scorch.disable_firewall
+      - synzack.ludus_scorch.create_scorch_accounts
+    role_vars:
+      # Service accounts to create
+      ludus_scorch_svc_account: "scorch_svc"
+      ludus_scorch_svc_password: "ScorchP@ss123!"
+      ludus_scorch_web_account: "scorch_web"
+      ludus_scorch_web_password: "ScorchWebP@ss123!"
+      ludus_scorch_sql_account: "scorch_sql"
+      ludus_scorch_sql_password: "ScorchSqlP@ss123!"
+      ludus_scorch_users_group: "OrchestratorUsers"
+      ludus_scorch_admins_group: "OrchestratorAdmins"
+      ludus_scorch_domain_admin: "domainadmin"
+
+  # =============================================================================
+  # SQL SERVER
+  # =============================================================================
+  - vm_name: "{{ range_id }}-SCORCH-SQL"
+    hostname: "SCORCH-SQL"
+    template: win2022-server-x64-template
+    vlan: 10
+    ip_last_octet: 20
+    ram_gb: 4
+    ram_min_gb: 2
+    cpus: 4
+    windows:
+      sysprep: true
+    domain:
+      fqdn: scorch.ludus.domain
+      role: member
+    roles:
+      - synzack.ludus_scorch.disable_firewall
+      - synzack.ludus_scorch.prereqs
+      - synzack.ludus_scorch.install_sql
+    role_vars:
+      # SQL Server installation
+      ludus_scorch_sql_iso_path: "C:\\ludus\\SQLServer2022-x64-ENU.iso"
+      ludus_scorch_sql_instance_name: "MSSQLSERVER"
+      ludus_scorch_sql_sa_password: "SqlP@ssw0rd123!"
+      ludus_scorch_sql_collation: "SQL_Latin1_General_CP1_CI_AS"
+      ludus_scorch_sql_tcp_port: 1433
+      ludus_scorch_sql_open_firewall: true
+
+  # =============================================================================
+  # MANAGEMENT SERVER (Primary)
+  # =============================================================================
+  - vm_name: "{{ range_id }}-SCORCH-MGMT"
+    hostname: "SCORCH-MGMT"
+    template: win2022-server-x64-template
+    vlan: 10
+    ip_last_octet: 21
+    ram_gb: 4
+    ram_min_gb: 2
+    cpus: 4
+    windows:
+      sysprep: true
+      autologon_user: domainadmin
+      autologon_password: password
+    domain:
+      fqdn: scorch.ludus.domain
+      role: member
+    roles:
+      - synzack.ludus_scorch.disable_firewall
+      - synzack.ludus_scorch.prereqs
+      - synzack.ludus_scorch.install_mgmt_server
+    role_vars:
+      # SCORCH installation
+      ludus_scorch_iso_path: "C:\\ludus\\mu_system_center_2022_orchestrator_x64_dvd.iso"
+      ludus_scorch_components: "ManagementServer,RunbookServer,RunbookDesigner"
+      ludus_scorch_svc_account: "scorch_svc"
+      ludus_scorch_svc_password: "ScorchP@ss123!"
+      # Database (points to SQL server)
+      ludus_scorch_db_server: "SCORCH-SQL"
+      ludus_scorch_db_name: "Orchestrator"
+      ludus_scorch_db_create_new: true
+      ludus_scorch_db_use_windows_auth: true
+      ludus_scorch_db_trust_cert: true
+      # Group
+      ludus_scorch_users_group: "OrchestratorUsers"
+      ludus_scorch_enable_remote_designer: true
+
+  # =============================================================================
+  # RUNBOOK SERVER (Secondary - for HA)
+  # =============================================================================
+  - vm_name: "{{ range_id }}-SCORCH-RB"
+    hostname: "SCORCH-RB"
+    template: win2022-server-x64-template
+    vlan: 10
+    ip_last_octet: 22
+    ram_gb: 4
+    ram_min_gb: 2
+    cpus: 4
+    windows:
+      sysprep: true
+    domain:
+      fqdn: scorch.ludus.domain
+      role: member
+    roles:
+      - synzack.ludus_scorch.disable_firewall
+      - synzack.ludus_scorch.prereqs
+      - synzack.ludus_scorch.install_runbook_server
+    role_vars:
+      ludus_scorch_iso_path: "C:\\ludus\\mu_system_center_2022_orchestrator_x64_dvd.iso"
+      ludus_scorch_components: "RunbookServer"
+      ludus_scorch_svc_account: "scorch_svc"
+      ludus_scorch_svc_password: "ScorchP@ss123!"
+      # Database (existing)
+      ludus_scorch_db_server: "SCORCH-SQL"
+      ludus_scorch_db_name: "Orchestrator"
+      ludus_scorch_db_use_windows_auth: true
+      ludus_scorch_db_trust_cert: true
+
+  # =============================================================================
+  # WEB SERVICES SERVER
+  # =============================================================================
+  - vm_name: "{{ range_id }}-SCORCH-WEB"
+    hostname: "SCORCH-WEB"
+    template: win2022-server-x64-template
+    vlan: 10
+    ip_last_octet: 23
+    ram_gb: 4
+    ram_min_gb: 2
+    cpus: 4
+    windows:
+      sysprep: true
+    domain:
+      fqdn: scorch.ludus.domain
+      role: member
+    roles:
+      - synzack.ludus_scorch.disable_firewall
+      - synzack.ludus_scorch.prereqs
+      - synzack.ludus_scorch.install_webservices
+      - synzack.ludus_scorch.create_variables
+      - synzack.ludus_scorch.create_runbooks
+    role_vars:
+      ludus_scorch_iso_path: "C:\\ludus\\mu_system_center_2022_orchestrator_x64_dvd.iso"
+      ludus_scorch_components: "WebAPI,WebConsole"
+      ludus_scorch_web_account: "scorch_web"
+      ludus_scorch_web_password: "ScorchWebP@ss123!"
+      # Database
+      ludus_scorch_db_server: "SCORCH-SQL"
+      ludus_scorch_db_name: "Orchestrator"
+      ludus_scorch_db_use_windows_auth: true
+      ludus_scorch_db_trust_cert: true
+      # Web service ports
+      ludus_scorch_api_port: 81
+      ludus_scorch_console_port: 82
+      # Security testing options
+      ludus_scorch_enable_anonymous_access: false  # Set true for unauthenticated testing
+      ludus_scorch_disable_ntlm_channel_binding: true  # Enable NTLM relay attacks
+      # Test variables for credential extraction
+      ludus_scorch_create_default_vars: true
+      # Create sample runbooks
+      ludus_scorch_create_default_runbooks: true
+
+  # =============================================================================
+  # WORKSTATION
+  # =============================================================================
+  - vm_name: "{{ range_id }}-WS01"
+    hostname: "WS01"
+    template: win11-22h2-x64-enterprise-template
+    vlan: 10
+    ip_last_octet: 50
+    ram_gb: 4
+    ram_min_gb: 2
+    cpus: 2
+    windows:
+      sysprep: true
+      install_additional_tools: true
+    domain:
+      fqdn: scorch.ludus.domain
+      role: member
+    roles:
+      - synzack.ludus_scorch.disable_firewall
+
+# =============================================================================
+# GLOBAL ROLE VARIABLES
+# =============================================================================
+# These variables are passed to ALL roles on ALL VMs
+global_role_vars:
+  ludus_scorch_temp_dir: "C:\\ludus_scorch_temp"
+
+# =============================================================================
+# NETWORK CONFIGURATION
+# =============================================================================
+network:
+  # Allow inter-VLAN routing (all SCORCH components need to communicate)
+  inter_vlan_default: allow
+  
+  # Allow internet for Windows updates and downloads during setup
+  external_default: allow
+  
+  # Custom rules (optional)
+  rules: []

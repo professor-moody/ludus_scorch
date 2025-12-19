@@ -1,0 +1,50 @@
+---
+# SQL Server Installation Configuration
+
+# SQL Server ISO/media paths
+ludus_scorch_sql_iso_path: ""  # Set via role_vars or upload to ludus
+ludus_scorch_sql_setup_path: "setup.exe"
+
+# SQL Server instance configuration
+ludus_scorch_sql_instance_name: "MSSQLSERVER"  # Default instance
+ludus_scorch_sql_instance_id: "MSSQLSERVER"
+
+# SQL Server features (Database Engine only for SCORCH)
+ludus_scorch_sql_features: "SQLENGINE"
+
+# Authentication
+ludus_scorch_sql_auth_mode: "Mixed"  # SQL or Mixed
+ludus_scorch_sql_sa_password: "SqlP@ssw0rd123!"
+
+# Service accounts (use domain accounts in production)
+ludus_scorch_sql_service_account: ""  # Empty = NT Service accounts
+ludus_scorch_sql_service_password: ""
+ludus_scorch_sql_agent_account: ""
+ludus_scorch_sql_agent_password: ""
+
+# SQL Server Admins (sysadmin role)
+ludus_scorch_sql_admins:
+  - "BUILTIN\\Administrators"
+
+# Collation (SCORCH requires specific collation)
+ludus_scorch_sql_collation: "SQL_Latin1_General_CP1_CI_AS"
+
+# Data directories
+ludus_scorch_sql_data_dir: "C:\\Program Files\\Microsoft SQL Server"
+ludus_scorch_sql_user_db_dir: ""
+ludus_scorch_sql_user_log_dir: ""
+ludus_scorch_sql_temp_db_dir: ""
+ludus_scorch_sql_backup_dir: ""
+
+# TCP/IP Configuration
+ludus_scorch_sql_tcp_enabled: true
+ludus_scorch_sql_tcp_port: 1433
+
+# Named Pipes
+ludus_scorch_sql_np_enabled: true
+
+# Firewall
+ludus_scorch_sql_open_firewall: true
+
+# SQL Server version (for path detection)
+ludus_scorch_sql_version: "2022"  # 2019 or 2022

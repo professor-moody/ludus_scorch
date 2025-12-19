@@ -1,0 +1,30 @@
+namespace: synzack
+name: ludus_scorch
+version: 1.0.0
+readme: README.md
+authors:
+  - Keys
+description: >
+  An Ansible collection that installs a SCORCH (System Center Orchestrator)
+  deployment with optional configurations for security testing with Ludus.
+license:
+  - GPL-3.0-or-later
+tags:
+  - windows
+  - scorch
+  - orchestrator
+  - systemcenter
+  - ludus
+  - security
+  - pentest
+  - redteam
+dependencies: {}
+repository: https://github.com/professor-moody/ludus_scorch
+documentation: https://github.com/professor-moody/ludus_scorch
+homepage: https://github.com/professor-moody/ludus_scorch
+issues: https://github.com/professor-moody/ludus_scorch/issues
+build_ignore:
+  - .gitignore
+  - .git
+  - '*.tar.gz'
+  - changelogs/.plugin-cache.yaml

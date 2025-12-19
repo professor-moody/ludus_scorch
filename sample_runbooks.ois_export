@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sample SCORCH Runbook Export
+  
+  This file can be imported into SCORCH using:
+  1. Open Runbook Designer
+  2. Right-click on Runbooks folder
+  3. Select Import
+  4. Choose this .ois_export file
+  
+  Contains runbooks that demonstrate:
+  - PowerShell script execution
+  - Variable usage (including encrypted)
+  - External system integration patterns
+-->
+<ExportData xmlns="http://schemas.microsoft.com/SystemCenter/Orchestrator/2007/11/ExportData">
+  <PolicyExports>
+    <!-- Server Health Check Runbook -->
+    <PolicyExport>
+      <Policy>
+        <UniqueID>11111111-1111-1111-1111-111111111111</UniqueID>
+        <Name>Server Health Check</Name>
+        <Description>Checks server health and reports to monitoring system</Description>
+        <CreatedBy>YOURNAMESPACE\domainadmin</CreatedBy>
+        <CreatedTime>2024-01-15T10:00:00</CreatedTime>
+        <ModifiedBy>YOURNAMESPACE\domainadmin</ModifiedBy>
+        <ModifiedTime>2024-01-15T10:00:00</ModifiedTime>
+      </Policy>
+      <Activities>
+        <Activity>
+          <UniqueID>aaaa1111-1111-1111-1111-111111111111</UniqueID>
+          <Name>Initialize Data</Name>
+          <Type>Initialize Data</Type>
+          <Description>Accepts target server name as input</Description>
+          <Position>
+            <X>100</X>
+            <Y>100</Y>
+          </Position>
+          <Configuration>
+            <Parameters>
+              <Parameter>
+                <Name>TargetServer</Name>
+                <Direction>Input</Direction>
+                <DataType>String</DataType>
+              </Parameter>
+            </Parameters>
+          </Configuration>
+        </Activity>
+        <Activity>
+          <UniqueID>aaaa2222-2222-2222-2222-222222222222</UniqueID>
+          <Name>Get Credentials</Name>
+          <Type>Get Variable</Type>
+          <Description>Retrieves admin credentials from encrypted variable</Description>
+          <Position>
+            <X>300</X>
+            <Y>100</Y>
+          </Position>
+          <Configuration>
+            <VariableName>Domain_Admin_Password</VariableName>
+          </Configuration>
+        </Activity>
+        <Activity>
+          <UniqueID>aaaa3333-3333-3333-3333-333333333333</UniqueID>
+          <Name>Check Server Health</Name>
+          <Type>Run .Net Script</Type>
+          <Description>PowerShell script to check server metrics</Description>
+          <Position>
+            <X>500</X>
+            <Y>100</Y>
+          </Position>
+          <Configuration>
+            <ScriptType>PowerShell</ScriptType>
+            <Script><![CDATA[
+$server = '{TargetServer from "Initialize Data"}'
+$password = '{Variable Value from "Get Credentials"}'
+$securePass = ConvertTo-SecureString $password -AsPlainText -Force
+$cred = New-Object PSCredential("YOURNAMESPACE\domainadmin", $securePass)
+
+$session = New-PSSession -ComputerName $server -Credential $cred
+$health = Invoke-Command -Session $session -ScriptBlock {
+    @{
+        CPU = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
+        Memory = (Get-Counter '\Memory\% Committed Bytes In Use').CounterSamples.CookedValue
+        Disk = (Get-Counter '\LogicalDisk(C:)\% Free Space').CounterSamples.CookedValue
+        Uptime = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+    }
+}
+Remove-PSSession $session
+
+$health | ConvertTo-Json
+            ]]></Script>
+          </Configuration>
+        </Activity>
+        <Activity>
+          <UniqueID>aaaa4444-4444-4444-4444-444444444444</UniqueID>
+          <Name>Send Alert</Name>
+          <Type>Send Email</Type>
+          <Description>Sends alert if metrics exceed threshold</Description>
+          <Position>
+            <X>700</X>
+            <Y>100</Y>
+          </Position>
+          <Configuration>
+            <SMTPServer>smtp.corp.local</SMTPServer>
+            <To>ops-team@corp.local</To>
+            <Subject>Server Health Alert - {TargetServer from "Initialize Data"}</Subject>
+            <Body>Health check results attached.</Body>
+          </Configuration>
+        </Activity>
+      </Activities>
+      <Links>
+        <Link>
+          <SourceActivity>aaaa1111-1111-1111-1111-111111111111</SourceActivity>
+          <TargetActivity>aaaa2222-2222-2222-2222-222222222222</TargetActivity>
+          <Color>Success</Color>
+        </Link>
+        <Link>
+          <SourceActivity>aaaa2222-2222-2222-2222-222222222222</SourceActivity>
+          <TargetActivity>aaaa3333-3333-3333-3333-333333333333</TargetActivity>
+          <Color>Success</Color>
+        </Link>
+        <Link>
+          <SourceActivity>aaaa3333-3333-3333-3333-333333333333</SourceActivity>
+          <TargetActivity>aaaa4444-4444-4444-4444-444444444444</TargetActivity>
+          <Color>Success</Color>
+        </Link>
+      </Links>
+    </PolicyExport>
+
+    <!-- SQL Backup Runbook -->
+    <PolicyExport>
+      <Policy>
+        <UniqueID>22222222-2222-2222-2222-222222222222</UniqueID>
+        <Name>SQL Database Backup</Name>
+        <Description>Performs backup of SQL databases with credential retrieval</Description>
+        <CreatedBy>YOURNAMESPACE\domainadmin</CreatedBy>
+        <CreatedTime>2024-01-15T10:00:00</CreatedTime>
+      </Policy>
+      <Activities>
+        <Activity>
+          <UniqueID>bbbb1111-1111-1111-1111-111111111111</UniqueID>
+          <Name>Initialize Data</Name>
+          <Type>Initialize Data</Type>
+          <Position>
+            <X>100</X>
+            <Y>100</Y>
+          </Position>
+          <Configuration>
+            <Parameters>
+              <Parameter>
+                <Name>SQLServer</Name>
+                <Direction>Input</Direction>
+              </Parameter>
+              <Parameter>
+                <Name>DatabaseName</Name>
+                <Direction>Input</Direction>
+              </Parameter>
+            </Parameters>
+          </Configuration>
+        </Activity>
+        <Activity>
+          <UniqueID>bbbb2222-2222-2222-2222-222222222222</UniqueID>
+          <Name>Get SQL Password</Name>
+          <Type>Get Variable</Type>
+          <Description>Gets SQL service account password</Description>
+          <Position>
+            <X>300</X>
+            <Y>100</Y>
+          </Position>
+          <Configuration>
+            <VariableName>SQL_ServiceAccount_Password</VariableName>
+          </Configuration>
+        </Activity>
+        <Activity>
+          <UniqueID>bbbb3333-3333-3333-3333-333333333333</UniqueID>
+          <Name>Execute Backup</Name>
+          <Type>Run .Net Script</Type>
+          <Position>
+            <X>500</X>
+            <Y>100</Y>
+          </Position>
+          <Configuration>
+            <ScriptType>PowerShell</ScriptType>
+            <Script><![CDATA[
+$server = '{SQLServer from "Initialize Data"}'
+$database = '{DatabaseName from "Initialize Data"}'
+$password = '{Variable Value from "Get SQL Password"}'
+$backupPath = "\\fileserver\backups\$database-$(Get-Date -Format 'yyyyMMdd-HHmmss').bak"
+
+$connectionString = "Server=$server;Database=master;User Id=sa;Password=$password"
+$query = "BACKUP DATABASE [$database] TO DISK = N'$backupPath' WITH FORMAT, COMPRESSION"
+
+Invoke-Sqlcmd -ConnectionString $connectionString -Query $query -QueryTimeout 3600
+Write-Output "Backup completed: $backupPath"
+            ]]></Script>
+          </Configuration>
+        </Activity>
+      </Activities>
+      <Links>
+        <Link>
+          <SourceActivity>bbbb1111-1111-1111-1111-111111111111</SourceActivity>
+          <TargetActivity>bbbb2222-2222-2222-2222-222222222222</TargetActivity>
+          <Color>Success</Color>
+        </Link>
+        <Link>
+          <SourceActivity>bbbb2222-2222-2222-2222-222222222222</SourceActivity>
+          <TargetActivity>bbbb3333-3333-3333-3333-333333333333</TargetActivity>
+          <Color>Success</Color>
+        </Link>
+      </Links>
+    </PolicyExport>
+
+    <!-- Azure VM Management Runbook -->
+    <PolicyExport>
+      <Policy>
+        <UniqueID>33333333-3333-3333-3333-333333333333</UniqueID>
+        <Name>Azure VM Power Management</Name>
+        <Description>Starts/stops Azure VMs using stored credentials</Description>
+        <CreatedBy>YOURNAMESPACE\domainadmin</CreatedBy>
+        <CreatedTime>2024-01-15T10:00:00</CreatedTime>
+      </Policy>
+      <Activities>
+        <Activity>
+          <UniqueID>cccc1111-1111-1111-1111-111111111111</UniqueID>
+          <Name>Initialize Data</Name>
+          <Type>Initialize Data</Type>
+          <Position>
+            <X>100</X>
+            <Y>100</Y>
+          </Position>
+          <Configuration>
+            <Parameters>
+              <Parameter>
+                <Name>Action</Name>
+                <Direction>Input</Direction>
+                <Description>Start or Stop</Description>
+              </Parameter>
+              <Parameter>
+                <Name>ResourceGroup</Name>
+                <Direction>Input</Direction>
+              </Parameter>
+              <Parameter>
+                <Name>VMName</Name>
+                <Direction>Input</Direction>
+              </Parameter>
+            </Parameters>
+          </Configuration>
+        </Activity>
+        <Activity>
+          <UniqueID>cccc2222-2222-2222-2222-222222222222</UniqueID>
+          <Name>Get Azure Secret</Name>
+          <Type>Get Variable</Type>
+          <Position>
+            <X>300</X>
+            <Y>100</Y>
+          </Position>
+          <Configuration>
+            <VariableName>Azure_ClientSecret</VariableName>
+          </Configuration>
+        </Activity>
+        <Activity>
+          <UniqueID>cccc3333-3333-3333-3333-333333333333</UniqueID>
+          <Name>Connect to Azure</Name>
+          <Type>Run .Net Script</Type>
+          <Position>
+            <X>500</X>
+            <Y>100</Y>
+          </Position>
+          <Configuration>
+            <ScriptType>PowerShell</ScriptType>
+            <Script><![CDATA[
+$tenantId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+$clientId = "12345678-abcd-ef12-3456-7890abcdef12"
+$clientSecret = '{Variable Value from "Get Azure Secret"}'
+$subscriptionId = "87654321-dcba-21fe-6543-210987654321"
+
+$secureSecret = ConvertTo-SecureString $clientSecret -AsPlainText -Force
+$credential = New-Object PSCredential($clientId, $secureSecret)
+
+Connect-AzAccount -ServicePrincipal -Credential $credential -Tenant $tenantId
+Set-AzContext -Subscription $subscriptionId
+
+$action = '{Action from "Initialize Data"}'
+$resourceGroup = '{ResourceGroup from "Initialize Data"}'
+$vmName = '{VMName from "Initialize Data"}'
+
+if ($action -eq "Start") {
+    Start-AzVM -ResourceGroupName $resourceGroup -Name $vmName
+} else {
+    Stop-AzVM -ResourceGroupName $resourceGroup -Name $vmName -Force
+}
+
+Disconnect-AzAccount
+            ]]></Script>
+          </Configuration>
+        </Activity>
+      </Activities>
+      <Links>
+        <Link>
+          <SourceActivity>cccc1111-1111-1111-1111-111111111111</SourceActivity>
+          <TargetActivity>cccc2222-2222-2222-2222-222222222222</TargetActivity>
+          <Color>Success</Color>
+        </Link>
+        <Link>
+          <SourceActivity>cccc2222-2222-2222-2222-222222222222</SourceActivity>
+          <TargetActivity>cccc3333-3333-3333-3333-333333333333</TargetActivity>
+          <Color>Success</Color>
+        </Link>
+      </Links>
+    </PolicyExport>
+  </PolicyExports>
+
+  <VariableExports>
+    <VariableExport>
+      <Variable>
+        <Name>Domain_Admin_Password</Name>
+        <Value>[ENCRYPTED]</Value>
+        <Description>Domain administrator password for server management</Description>
+      </Variable>
+    </VariableExport>
+    <VariableExport>
+      <Variable>
+        <Name>SQL_ServiceAccount_Password</Name>
+        <Value>[ENCRYPTED]</Value>
+        <Description>SQL Server SA password for backup operations</Description>
+      </Variable>
+    </VariableExport>
+    <VariableExport>
+      <Variable>
+        <Name>Azure_ClientSecret</Name>
+        <Value>[ENCRYPTED]</Value>
+        <Description>Azure Service Principal client secret</Description>
+      </Variable>
+    </VariableExport>
+  </VariableExports>
+
+  <GlobalConfigurationExports>
+    <ConfigurationExport>
+      <Name>SCOM_ManagementServer</Name>
+      <Value>scom-mgmt.corp.local</Value>
+      <Category>SCOM</Category>
+    </ConfigurationExport>
+    <ConfigurationExport>
+      <Name>Exchange_Server</Name>
+      <Value>exchange.corp.local</Value>
+      <Category>Exchange</Category>
+    </ConfigurationExport>
+    <ConfigurationExport>
+      <Name>ServiceNow_Instance</Name>
+      <Value>corpinc.service-now.com</Value>
+      <Category>ServiceNow</Category>
+    </ConfigurationExport>
+  </GlobalConfigurationExports>
+</ExportData>

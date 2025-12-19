@@ -1,0 +1,30 @@
+---
+# Disable Windows Firewall for lab environments
+# WARNING: Only use in isolated lab environments
+
+- name: Disable Windows Firewall - Domain Profile
+  ansible.windows.win_firewall:
+    state: disabled
+    profiles:
+      - Domain
+  ignore_errors: true
+
+- name: Disable Windows Firewall - Private Profile
+  ansible.windows.win_firewall:
+    state: disabled
+    profiles:
+      - Private
+  ignore_errors: true
+
+- name: Disable Windows Firewall - Public Profile
+  ansible.windows.win_firewall:
+    state: disabled
+    profiles:
+      - Public
+  ignore_errors: true
+
+- name: Ensure firewall service is running but profiles disabled
+  ansible.windows.win_service:
+    name: MpsSvc
+    state: started
+    start_mode: auto

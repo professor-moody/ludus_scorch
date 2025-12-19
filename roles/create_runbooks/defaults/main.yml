@@ -1,0 +1,137 @@
+---
+# SCORCH Runbook Creation Configuration
+
+# Database connection
+ludus_scorch_db_server: ""
+ludus_scorch_db_instance: ""
+ludus_scorch_db_name: "Orchestrator"
+ludus_scorch_db_trust_cert: true
+
+# Create default sample runbooks
+ludus_scorch_create_default_runbooks: true
+
+# Runbook folder structure to create
+ludus_scorch_runbook_folders:
+  - name: "IT Operations"
+    subfolders:
+      - "Server Management"
+      - "User Management"
+      - "Backup Operations"
+  - name: "Security"
+    subfolders:
+      - "Incident Response"
+      - "Compliance"
+  - name: "Cloud"
+    subfolders:
+      - "Azure"
+      - "AWS"
+  - name: "Integration"
+    subfolders:
+      - "ServiceNow"
+      - "SCOM"
+      - "Exchange"
+
+# Sample runbooks to create (these simulate real enterprise runbooks)
+ludus_scorch_sample_runbooks:
+  # Server Management Runbooks
+  - name: "Server Health Check"
+    folder: "IT Operations\\Server Management"
+    description: "Checks server health metrics and reports status"
+    uses_credentials: true
+    
+  - name: "Restart Windows Service"
+    folder: "IT Operations\\Server Management"
+    description: "Restarts a specified Windows service on target server"
+    uses_credentials: true
+    
+  - name: "Deploy Security Patches"
+    folder: "IT Operations\\Server Management"
+    description: "Deploys approved security patches to servers"
+    uses_credentials: true
+
+  # User Management Runbooks
+  - name: "Create New User"
+    folder: "IT Operations\\User Management"
+    description: "Creates new AD user with standard group memberships"
+    uses_credentials: true
+    
+  - name: "Disable Terminated User"
+    folder: "IT Operations\\User Management"
+    description: "Disables user account and removes group memberships"
+    uses_credentials: true
+    
+  - name: "Reset User Password"
+    folder: "IT Operations\\User Management"
+    description: "Resets user password and sends notification"
+    uses_credentials: true
+
+  # Backup Operations
+  - name: "SQL Database Backup"
+    folder: "IT Operations\\Backup Operations"
+    description: "Performs full backup of SQL databases"
+    uses_credentials: true
+    
+  - name: "Verify Backup Status"
+    folder: "IT Operations\\Backup Operations"
+    description: "Verifies backup completion and integrity"
+    uses_credentials: true
+
+  # Security Runbooks
+  - name: "Lock Compromised Account"
+    folder: "Security\\Incident Response"
+    description: "Immediately locks account and logs incident"
+    uses_credentials: true
+    
+  - name: "Collect Forensic Data"
+    folder: "Security\\Incident Response"
+    description: "Collects logs and artifacts from target system"
+    uses_credentials: true
+    
+  - name: "Compliance Audit Report"
+    folder: "Security\\Compliance"
+    description: "Generates compliance report for auditors"
+    uses_credentials: true
+
+  # Cloud Runbooks
+  - name: "Start Azure VMs"
+    folder: "Cloud\\Azure"
+    description: "Starts Azure VMs based on schedule"
+    uses_credentials: true
+    
+  - name: "Azure Resource Report"
+    folder: "Cloud\\Azure"
+    description: "Generates report of Azure resource usage"
+    uses_credentials: true
+    
+  - name: "AWS EC2 Snapshot"
+    folder: "Cloud\\AWS"
+    description: "Creates snapshots of EC2 instances"
+    uses_credentials: true
+
+  # Integration Runbooks
+  - name: "Create ServiceNow Ticket"
+    folder: "Integration\\ServiceNow"
+    description: "Creates incident ticket in ServiceNow"
+    uses_credentials: true
+    
+  - name: "SCOM Alert Handler"
+    folder: "Integration\\SCOM"
+    description: "Processes SCOM alerts and takes action"
+    uses_credentials: true
+    
+  - name: "Exchange Mailbox Report"
+    folder: "Integration\\Exchange"
+    description: "Generates mailbox usage report"
+    uses_credentials: true
+
+# Schedules to create
+ludus_scorch_schedules:
+  - name: "Daily 6AM"
+    pattern: "daily"
+    time: "06:00"
+  - name: "Weekly Sunday"
+    pattern: "weekly"
+    day: "Sunday"
+    time: "02:00"
+  - name: "Hourly"
+    pattern: "hourly"

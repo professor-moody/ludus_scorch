@@ -1,0 +1,176 @@
+---
+# Create encrypted variables in SCORCH for security testing
+
+- name: Set database connection string
+  ansible.builtin.set_fact:
+    ludus_scorch_db_connection: "{{ ludus_scorch_db_server }}{% if ludus_scorch_db_instance | length > 0 %}\\{{ ludus_scorch_db_instance }}{% endif %}"
+
+- name: Combine default and custom variables
+  ansible.builtin.set_fact:
+    ludus_scorch_all_variables: "{{ (ludus_scorch_default_variables if ludus_scorch_create_default_vars else []) + ludus_scorch_custom_variables }}"
+
+- name: Wait for database connectivity
+  ansible.windows.win_shell: |
+    $retries = 0
+    while ($retries -lt 30) {
+      try {
+        $conn = New-Object System.Data.SqlClient.SqlConnection
+        $conn.ConnectionString = "Server={{ ludus_scorch_db_connection }};Database={{ ludus_scorch_db_name }};Integrated Security=True;TrustServerCertificate={{ ludus_scorch_db_trust_cert }}"
+        $conn.Open()
+        $conn.Close()
+        Write-Output "Connected to database"
+        exit 0
+      } catch {
+        Start-Sleep -Seconds 10
+        $retries++
+      }
+    }
+    Write-Error "Could not connect to database"
+    exit 1
+  register: db_ready
+  changed_when: false
+
+- name: Create variable creation script
+  ansible.windows.win_copy:
+    content: |
+      param(
+        [Parameter(Mandatory=$true)]
+        [string]$VariableName,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$VariableValue,
+        
+        [string]$FolderPath = "Variables",
+        
+        [string]$DbServer = "{{ ludus_scorch_db_connection }}",
+        [string]$DbName = "{{ ludus_scorch_db_name }}"
+      )
+      
+      $ErrorActionPreference = "Stop"
+      
+      $connectionString = "Server=$DbServer;Database=$DbName;Integrated Security=True;TrustServerCertificate=True"
+      $conn = New-Object System.Data.SqlClient.SqlConnection($connectionString)
+      $conn.Open()
+      
+      try {
+        # Get or create folder structure
+        $folderParts = $FolderPath -split '\\'
+        $parentId = '00000000-0000-0000-0000-000000000005'  # Root Variables folder
+        
+        foreach ($folderName in $folderParts) {
+          if ([string]::IsNullOrWhiteSpace($folderName)) { continue }
+          
+          # Check if folder exists
+          $cmd = $conn.CreateCommand()
+          $cmd.CommandText = "SELECT UniqueID FROM [dbo].[FOLDERS] WHERE Name = @Name AND ParentID = @ParentId"
+          $cmd.Parameters.AddWithValue("@Name", $folderName) | Out-Null
+          $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
+          $existingFolderId = $cmd.ExecuteScalar()
+          
+          if ($existingFolderId) {
+            $parentId = $existingFolderId
+          } else {
+            # Create folder
+            $newFolderId = [System.Guid]::NewGuid().ToString()
+            $cmd = $conn.CreateCommand()
+            $cmd.CommandText = @"
+              INSERT INTO [dbo].[FOLDERS] (UniqueID, ParentID, Name, Description, Deleted, LastModified)
+              VALUES (@FolderId, @ParentId, @Name, '', 0, GETUTCDATE())
+      "@
+            $cmd.Parameters.AddWithValue("@FolderId", $newFolderId) | Out-Null
+            $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
+            $cmd.Parameters.AddWithValue("@Name", $folderName) | Out-Null
+            $cmd.ExecuteNonQuery() | Out-Null
+            $parentId = $newFolderId
+          }
+        }
+        
+        # Check if variable already exists
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandText = "SELECT o.UniqueID FROM [dbo].[OBJECTS] o WHERE o.Name = @Name AND o.ParentID = @ParentId AND o.Deleted = 0"
+        $cmd.Parameters.AddWithValue("@Name", $VariableName) | Out-Null
+        $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
+        $existingVarId = $cmd.ExecuteScalar()
+        
+        if ($existingVarId) {
+          # Update existing variable
+          $cmd = $conn.CreateCommand()
+          $cmd.CommandText = "UPDATE [dbo].[VARIABLES] SET Value = @Value WHERE UniqueID = @VarId"
+          $cmd.Parameters.AddWithValue("@Value", $VariableValue) | Out-Null
+          $cmd.Parameters.AddWithValue("@VarId", $existingVarId) | Out-Null
+          $cmd.ExecuteNonQuery() | Out-Null
+          Write-Output "Updated variable: $VariableName"
+        } else {
+          # Create new variable
+          $objectId = [System.Guid]::NewGuid().ToString()
+          
+          # Insert into OBJECTS table
+          $cmd = $conn.CreateCommand()
+          $cmd.CommandText = @"
+            INSERT INTO [dbo].[OBJECTS] (UniqueID, ParentID, Name, ObjectType, Deleted, LastModified)
+            VALUES (@ObjectId, @ParentId, @Name, 'Variable', 0, GETUTCDATE())
+      "@
+          $cmd.Parameters.AddWithValue("@ObjectId", $objectId) | Out-Null
+          $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
+          $cmd.Parameters.AddWithValue("@Name", $VariableName) | Out-Null
+          $cmd.ExecuteNonQuery() | Out-Null
+          
+          # Insert into VARIABLES table
+          $cmd = $conn.CreateCommand()
+          $cmd.CommandText = "INSERT INTO [dbo].[VARIABLES] (UniqueID, Value) VALUES (@ObjectId, @Value)"
+          $cmd.Parameters.AddWithValue("@ObjectId", $objectId) | Out-Null
+          $cmd.Parameters.AddWithValue("@Value", $VariableValue) | Out-Null
+          $cmd.ExecuteNonQuery() | Out-Null
+          
+          Write-Output "Created variable: $VariableName in $FolderPath"
+        }
+      }
+      finally {
+        $conn.Close()
+      }
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\Create-OrchestratorVariable.ps1"
+
+- name: Create test variables
+  ansible.windows.win_shell: |
+    & "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\Create-OrchestratorVariable.ps1" `
+      -VariableName "{{ item.name }}" `
+      -VariableValue "{{ item.value }}" `
+      -FolderPath "{{ item.folder | default('Variables') }}"
+  loop: "{{ ludus_scorch_all_variables }}"
+  when: ludus_scorch_all_variables | length > 0
+
+- name: Verify variables created
+  ansible.windows.win_shell: |
+    $connectionString = "Server={{ ludus_scorch_db_connection }};Database={{ ludus_scorch_db_name }};Integrated Security=True;TrustServerCertificate=True"
+    $conn = New-Object System.Data.SqlClient.SqlConnection($connectionString)
+    $conn.Open()
+    
+    $cmd = $conn.CreateCommand()
+    $cmd.CommandText = @"
+      SELECT COUNT(*) as Total,
+             SUM(CASE WHEN v.Value LIKE '`d.T.~De/%' THEN 1 ELSE 0 END) as Encrypted
+      FROM [dbo].[VARIABLES] v
+      INNER JOIN [dbo].[OBJECTS] o ON v.UniqueID = o.UniqueID
+      WHERE o.Deleted = 0
+    "@
+    
+    $reader = $cmd.ExecuteReader()
+    if ($reader.Read()) {
+      $total = $reader["Total"]
+      $encrypted = $reader["Encrypted"]
+      Write-Output "Total Variables: $total (Encrypted: $encrypted)"
+    }
+    $reader.Close()
+    $conn.Close()
+  register: var_count
+  changed_when: false
+
+- name: Display variable creation summary
+  ansible.builtin.debug:
+    msg: |
+      SCORCH Variable Creation Complete
+      {{ var_count.stdout }}
+      Variables created for security testing:
+      {% for var in ludus_scorch_all_variables %}
+        - {{ var.name }} ({{ var.folder | default('Variables') }})
+      {% endfor %}

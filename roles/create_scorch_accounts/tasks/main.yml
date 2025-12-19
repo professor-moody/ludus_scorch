@@ -1,0 +1,102 @@
+---
+# Create SCORCH service accounts and groups in Active Directory
+# This role runs on the Domain Controller
+
+- name: Get domain DN from domain FQDN
+  ansible.builtin.set_fact:
+    ludus_scorch_domain_dn: "DC={{ ludus_domain_fqdn | default('ludus.domain') | regex_replace('\\.', ',DC=') }}"
+
+- name: Create SCORCH service account
+  microsoft.ad.user:
+    name: "{{ ludus_scorch_svc_account }}"
+    firstname: "SCORCH"
+    surname: "Service"
+    password: "{{ ludus_scorch_svc_password }}"
+    password_never_expires: true
+    user_cannot_change_password: true
+    state: present
+    description: "SCORCH Management and Runbook Server Service Account"
+    enabled: true
+
+- name: Create SCORCH web service account
+  microsoft.ad.user:
+    name: "{{ ludus_scorch_web_account }}"
+    firstname: "SCORCH"
+    surname: "WebService"
+    password: "{{ ludus_scorch_web_password }}"
+    password_never_expires: true
+    user_cannot_change_password: true
+    state: present
+    description: "SCORCH Web API and Console Service Account"
+    enabled: true
+
+- name: Create SCORCH SQL service account
+  microsoft.ad.user:
+    name: "{{ ludus_scorch_sql_account }}"
+    firstname: "SCORCH"
+    surname: "SQL"
+    password: "{{ ludus_scorch_sql_password }}"
+    password_never_expires: true
+    user_cannot_change_password: true
+    state: present
+    description: "SCORCH SQL Server Service Account"
+    enabled: true
+
+- name: Create Orchestrator Users group
+  microsoft.ad.group:
+    name: "{{ ludus_scorch_users_group }}"
+    scope: global
+    category: security
+    state: present
+    description: "Orchestrator Users - Can use Runbook Designer and execute runbooks"
+
+- name: Create Orchestrator Admins group
+  microsoft.ad.group:
+    name: "{{ ludus_scorch_admins_group }}"
+    scope: global
+    category: security
+    state: present
+    description: "Orchestrator Administrators - Full administrative access"
+
+- name: Add service accounts to Orchestrator Admins group
+  microsoft.ad.group:
+    name: "{{ ludus_scorch_admins_group }}"
+    members:
+      add:
+        - "{{ ludus_scorch_svc_account }}"
+        - "{{ ludus_scorch_web_account }}"
+    state: present
+
+- name: Add domain admin to Orchestrator Admins group
+  microsoft.ad.group:
+    name: "{{ ludus_scorch_admins_group }}"
+    members:
+      add:
+        - "{{ ludus_scorch_domain_admin }}"
+    state: present
+
+- name: Add additional admins to Orchestrator Admins group
+  microsoft.ad.group:
+    name: "{{ ludus_scorch_admins_group }}"
+    members:
+      add: "{{ ludus_scorch_additional_admins }}"
+    state: present
+  when: ludus_scorch_additional_admins | length > 0
+
+- name: Add additional users to Orchestrator Users group
+  microsoft.ad.group:
+    name: "{{ ludus_scorch_users_group }}"
+    members:
+      add: "{{ ludus_scorch_additional_users }}"
+    state: present
+  when: ludus_scorch_additional_users | length > 0
+
+- name: Display created accounts
+  ansible.builtin.debug:
+    msg: |
+      SCORCH Accounts Created:
+        Service Account: {{ ludus_scorch_svc_account }}
+        Web Account: {{ ludus_scorch_web_account }}
+        SQL Account: {{ ludus_scorch_sql_account }}
+        Admins Group: {{ ludus_scorch_admins_group }}
+        Users Group: {{ ludus_scorch_users_group }}

@@ -1,0 +1,164 @@
+---
+# Install SCORCH Management Server
+
+- name: Set computed variables
+  ansible.builtin.set_fact:
+    ludus_scorch_service_account_full: "{{ ludus_domain_netbios_name | default('YOURNAMESPACE') }}\\{{ ludus_scorch_svc_account }}"
+    ludus_scorch_db_connection: "{{ ludus_scorch_db_server }}{% if ludus_scorch_db_instance | length > 0 %}\\{{ ludus_scorch_db_instance }}{% endif %}"
+
+- name: Create temp directory
+  ansible.windows.win_file:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}"
+    state: directory
+
+- name: Check if SCORCH Management Server is already installed
+  ansible.windows.win_service_info:
+    name: OrchestratorManagement
+  register: scorch_mgmt_service
+  failed_when: false
+
+- name: Skip installation if already installed
+  ansible.builtin.debug:
+    msg: "SCORCH Management Server is already installed"
+  when: scorch_mgmt_service.services | length > 0
+
+- name: Check if SCORCH ISO exists
+  ansible.windows.win_stat:
+    path: "{{ ludus_scorch_iso_path }}"
+  register: scorch_iso_stat
+  when: scorch_mgmt_service.services | length == 0
+
+- name: Fail if SCORCH ISO not found
+  ansible.builtin.fail:
+    msg: |
+      SCORCH ISO not found at {{ ludus_scorch_iso_path }}.
+      Please upload the System Center Orchestrator ISO to the Ludus file share.
+  when:
+    - scorch_mgmt_service.services | length == 0
+    - not scorch_iso_stat.stat.exists | default(false)
+
+- name: Mount SCORCH ISO
+  community.windows.win_disk_image:
+    image_path: "{{ ludus_scorch_iso_path }}"
+    state: present
+  register: scorch_iso_mount
+  when: scorch_mgmt_service.services | length == 0
+
+- name: Set SCORCH setup path
+  ansible.builtin.set_fact:
+    ludus_scorch_setup_path: "{{ scorch_iso_mount.mount_paths[0] }}SetupOrchestrator.exe"
+  when: scorch_iso_mount.mount_paths is defined
+
+- name: Add service account to local Administrators
+  ansible.windows.win_group_membership:
+    name: Administrators
+    members:
+      - "{{ ludus_scorch_service_account_full }}"
+    state: present
+  failed_when: false
+
+- name: Grant Log on as a Service right
+  ansible.windows.win_user_right:
+    name: SeServiceLogonRight
+    users:
+      - "{{ ludus_scorch_service_account_full }}"
+    action: add
+
+- name: Get Orchestrator Users Group SID
+  ansible.windows.win_shell: |
+    try {
+      $group = Get-ADGroup "{{ ludus_scorch_users_group }}" -ErrorAction Stop
+      Write-Output $group.SID.Value
+    } catch {
+      # Try local group
+      $group = Get-LocalGroup "{{ ludus_scorch_users_group }}" -ErrorAction SilentlyContinue
+      if ($group) {
+        Write-Output $group.SID.Value
+      } else {
+        Write-Output ""
+      }
+    }
+  register: users_group_sid
+  changed_when: false
+  failed_when: false
+
+- name: Install SCORCH Management Server
+  ansible.windows.win_shell: |
+    $ErrorActionPreference = "Stop"
+    $env:SEE_MASK_NOZONECHECKS = 1
+    
+    $args = @(
+      '/Silent',
+      '/ServiceUserName:{{ ludus_scorch_service_account_full }}',
+      '/ServicePassword:{{ ludus_scorch_svc_password }}',
+      '/Components:{{ ludus_scorch_components }}',
+      '/DbServer:{{ ludus_scorch_db_connection }}',
+      '/DbNameNew:{{ ludus_scorch_db_name }}',
+      '/TrustServerCertificate:{{ ludus_scorch_db_trust_cert | lower }}',
+      '/UseMicrosoftUpdate:{% if ludus_scorch_use_microsoft_update %}1{% else %}0{% endif %}',
+      '/SendTelemetryReports:{% if ludus_scorch_send_telemetry %}1{% else %}0{% endif %}',
+      '/EnableErrorReporting:{{ ludus_scorch_error_reporting }}'
+    )
+    
+    {% if users_group_sid.stdout | trim | length > 0 %}
+    $args += '/OrchestratorUsersGroup:{{ users_group_sid.stdout | trim }}'
+    {% endif %}
+    
+    {% if ludus_scorch_enable_remote_designer %}
+    $args += '/OrchestratorRemote'
+    {% endif %}
+    
+    Write-Output "Starting SCORCH installation with arguments:"
+    Write-Output ($args -join "`n")
+    
+    $process = Start-Process -FilePath "{{ ludus_scorch_setup_path }}" `
+      -ArgumentList $args `
+      -Wait -PassThru -NoNewWindow
+    
+    if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
+      Write-Output "SCORCH Management Server installed successfully"
+      exit 0
+    } else {
+      Write-Error "Installation failed with exit code: $($process.ExitCode)"
+      # Check setup log
+      $logPath = "$env:LOCALAPPDATA\SCO\LOGS"
+      if (Test-Path $logPath) {
+        Get-ChildItem $logPath -Filter "*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | Get-Content -Tail 50
+      }
+      exit $process.ExitCode
+    }
+  when: scorch_mgmt_service.services | length == 0
+  register: scorch_install
+  async: 3600
+  poll: 60
+
+- name: Unmount SCORCH ISO
+  community.windows.win_disk_image:
+    image_path: "{{ ludus_scorch_iso_path }}"
+    state: absent
+  when: scorch_iso_mount.mount_paths is defined
+
+- name: Wait for Management Server service to start
+  ansible.windows.win_service:
+    name: OrchestratorManagement
+    state: started
+    start_mode: auto
+  register: mgmt_service
+  retries: 10
+  delay: 30
+  until: mgmt_service is succeeded
+
+- name: Verify Management Server is running
+  ansible.windows.win_shell: |
+    $service = Get-Service -Name OrchestratorManagement
+    Write-Output "Management Server Status: $($service.Status)"
+    if ($service.Status -eq 'Running') { exit 0 } else { exit 1 }
+  register: mgmt_verify
+  changed_when: false
+
+- name: Display installation status
+  ansible.builtin.debug:
+    msg: |
+      SCORCH Management Server Installation Complete
+      Service Status: {{ mgmt_verify.stdout }}
+      Database: {{ ludus_scorch_db_connection }}\{{ ludus_scorch_db_name }}

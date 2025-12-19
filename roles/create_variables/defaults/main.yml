@@ -1,0 +1,63 @@
+---
+# SCORCH Variables Configuration for Security Testing
+
+# Database connection info
+ludus_scorch_db_server: ""  # Required
+ludus_scorch_db_instance: ""
+ludus_scorch_db_name: "Orchestrator"
+ludus_scorch_db_trust_cert: true
+
+# Create default test variables with sensitive data
+ludus_scorch_create_default_vars: true
+
+# Default test variables (simulating real-world credential storage)
+ludus_scorch_default_variables:
+  # Service account credentials
+  - name: "SQL_ServiceAccount_Password"
+    value: "SqlSvcP@ssw0rd123!"
+    folder: "Credentials\\SQL"
+  - name: "Domain_Admin_Password"
+    value: "DomainAdm!nP@ss456"
+    folder: "Credentials\\AD"
+  - name: "Exchange_ServiceAccount"
+    value: "ExchP@ssword789!"
+    folder: "Credentials\\Exchange"
+  - name: "SCOM_RunAs_Password"
+    value: "ScomRunAsP@ss!"
+    folder: "Credentials\\SCOM"
+  - name: "VMM_ServiceAccount"
+    value: "VmmSvcP@ssw0rd!"
+    folder: "Credentials\\VMM"
+  
+  # API Keys and Secrets
+  - name: "API_Key_Production"
+    value: "sk-prod-abc123xyz789defghijklmnop"
+    folder: "Secrets\\API"
+  - name: "Azure_ClientSecret"
+    value: "AzureClientSecretValue123!@#"
+    folder: "Secrets\\Azure"
+  - name: "AWS_SecretAccessKey"
+    value: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    folder: "Secrets\\AWS"
+  - name: "GitHub_PAT"
+    value: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    folder: "Secrets\\GitHub"
+  
+  # Database connection strings
+  - name: "ProductionDB_ConnString"
+    value: "Server=proddb.corp.local;Database=AppDB;User Id=appuser;Password=ProdDBP@ss!;"
+    folder: "ConnectionStrings"
+  - name: "HRIS_Database_Password"
+    value: "HrisDbP@ssword!23"
+    folder: "ConnectionStrings"
+  
+  # Network credentials
+  - name: "Backup_Admin_Password"
+    value: "BackupAdm!nP@ss"
+    folder: "Credentials\\Infrastructure"
+  - name: "Switch_Admin_Password"
+    value: "C!sco123Admin"
+    folder: "Credentials\\Network"
+
+# Custom variables (add your own)
+ludus_scorch_custom_variables: []
