@@ -26,6 +26,8 @@ For the corresponding research and tools, see the [scorch-tools](https://github.
 
 ## Installation in [Ludus](https://ludus.cloud)
 
+### Option A: From Ansible Galaxy (Recommended)
+
 1. Add the required roles and collection to your Ludus server
 
 ```bash
@@ -34,6 +36,37 @@ ludus ansible collection add professor_moody.ludus_scorch
 ```
 
 2. Upload the SCORCH ISO to Ludus (SQL is auto-downloaded, no ISO needed!)
+
+```bash
+ludus range file-upload -f DVDSCORCH2022.iso
+```
+
+3. Set your config and deploy
+
+```bash
+ludus range config set -f distributed.yml
+ludus range deploy
+# Wait for the range to successfully deploy
+# You can watch the logs with `ludus range logs -f`
+# Or check the status with `ludus range status`
+```
+
+### Option B: From Source (Git Clone)
+
+1. Clone the repository and add dependencies
+
+```bash
+git clone https://github.com/professor-moody/ludus_scorch
+cd ludus_scorch
+
+# Add the SQL Server role dependency
+ludus ansible role add badsectorlabs.ludus_mssql
+
+# Build and add the collection from source
+ludus ansible collection add -l .
+```
+
+2. Upload the SCORCH ISO
 
 ```bash
 ludus range file-upload -f DVDSCORCH2022.iso
