@@ -18,14 +18,15 @@
 # Deployment Time: ~90 minutes
 #
 # Prerequisites:
-#   1. Upload SCORCH 2022 ISO to Ludus file share
-#   2. Add the SQL role: ludus ansible roles add badsectorlabs.ludus_mssql
-#   3. Add the collection: ludus ansible collection add professor_moody.ludus_scorch
+#   1. Add the SQL role: ludus ansible role add badsectorlabs.ludus_mssql
+#   2. Add the collection: ludus ansible collection add professor_moody.ludus_scorch
 #
 # Usage:
 #   ludus range config set -f distributed.yml
 #   ludus range deploy
 #   ludus range logs -f
+#
+# Note: Both SQL Server and SCORCH are auto-downloaded - no ISO uploads needed!
 #
 
 ludus:
@@ -79,7 +80,6 @@ ludus:
       role: member
     roles:
       - professor_moody.ludus_scorch.disable_firewall
-      - professor_moody.ludus_scorch.prereqs
       - badsectorlabs.ludus_mssql
     role_vars:
       # SQL Server installation (auto-downloads, no ISO needed!)
@@ -106,11 +106,9 @@ ludus:
       role: member
     roles:
       - professor_moody.ludus_scorch.disable_firewall
-      - professor_moody.ludus_scorch.prereqs
       - professor_moody.ludus_scorch.install_mgmt_server
     role_vars:
-      # SCORCH installation
-      ludus_scorch_iso_path: "C:\\ludus\\DVDSCORCH2022.iso"
+      # SCORCH installation (auto-downloads from Microsoft!)
       ludus_scorch_components: "ManagementServer,RunbookServer,RunbookDesigner"
       ludus_scorch_svc_account: "scorch_svc"
       ludus_scorch_svc_password: "ScorchP@ss123!"
@@ -142,10 +140,9 @@ ludus:
       role: member
     roles:
       - professor_moody.ludus_scorch.disable_firewall
-      - professor_moody.ludus_scorch.prereqs
       - professor_moody.ludus_scorch.install_runbook_server
     role_vars:
-      ludus_scorch_iso_path: "C:\\ludus\\DVDSCORCH2022.iso"
+      # SCORCH installation (auto-downloads from Microsoft!)
       ludus_scorch_components: "RunbookServer"
       ludus_scorch_svc_account: "scorch_svc"
       ludus_scorch_svc_password: "ScorchP@ss123!"
@@ -173,12 +170,11 @@ ludus:
       role: member
     roles:
       - professor_moody.ludus_scorch.disable_firewall
-      - professor_moody.ludus_scorch.prereqs
       - professor_moody.ludus_scorch.install_webservices
       - professor_moody.ludus_scorch.create_variables
       - professor_moody.ludus_scorch.create_runbooks
     role_vars:
-      ludus_scorch_iso_path: "C:\\ludus\\DVDSCORCH2022.iso"
+      # SCORCH installation (auto-downloads from Microsoft!)
       ludus_scorch_components: "WebAPI,WebConsole"
       ludus_scorch_web_account: "scorch_web"
       ludus_scorch_web_password: "ScorchWebP@ss123!"

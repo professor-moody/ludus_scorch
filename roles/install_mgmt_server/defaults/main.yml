@@ -1,8 +1,10 @@
 ---
 # SCORCH Management Server Installation Configuration
 
-# SCORCH ISO path
-ludus_scorch_iso_path: ""  # Set via role_vars
+# SCORCH Setup - auto-downloaded from Microsoft
+ludus_scorch_download_url: "https://go.microsoft.com/fwlink/p/?LinkID=2195531&clcid=0x409&culture=en-us&country=US"
+ludus_scorch_setup_zip: "C:\\ludus\\DVDSCORCH2022.zip"
+ludus_scorch_setup_folder: "C:\\ludus\\SCORCH2022"
 
 # Installation components for Management Server
 ludus_scorch_components: "ManagementServer,RunbookDesigner"

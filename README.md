@@ -15,14 +15,13 @@ For the corresponding research and tools, see the [scorch-tools](https://github.
 | `disable_firewall` | Disable Windows Firewall on lab hosts |
 | `install_adcs` | Install AD Certificate Services for LDAPS |
 | `create_scorch_accounts` | Create service accounts and groups in AD |
-| `prereqs` | Install prerequisites (.NET, IIS, VC++ Redist) |
 | `install_mgmt_server` | Install Management Server and create database |
 | `install_runbook_server` | Install additional Runbook Server |
 | `install_webservices` | Install Web API and Orchestration Console |
 | `create_variables` | Create test encrypted variables for security testing |
 | `create_runbooks` | Create sample runbooks, folders, schedules, and configs |
 
-> **Note:** SQL Server is installed using `badsectorlabs.ludus_mssql` (auto-downloads, no ISO needed)
+> **Note:** SQL Server is installed using `badsectorlabs.ludus_mssql` (auto-downloads, no ISO needed). SCORCH is also auto-downloaded from Microsoft Evaluation Center.
 
 ## Installation in [Ludus](https://ludus.cloud)
 
@@ -35,13 +34,7 @@ ludus ansible role add badsectorlabs.ludus_mssql
 ludus ansible collection add professor_moody.ludus_scorch
 ```
 
-2. Upload the SCORCH ISO to Ludus (SQL is auto-downloaded, no ISO needed!)
-
-```bash
-ludus range file-upload -f DVDSCORCH2022.iso
-```
-
-3. Set your config and deploy
+2. Set your config and deploy
 
 ```bash
 ludus range config set -f distributed.yml
@@ -50,6 +43,8 @@ ludus range deploy
 # You can watch the logs with `ludus range logs -f`
 # Or check the status with `ludus range status`
 ```
+
+**No file uploads required!** Both SQL Server and SCORCH are automatically downloaded during deployment.
 
 ### Option B: From Source (Git Clone)
 
@@ -66,13 +61,7 @@ ludus ansible role add badsectorlabs.ludus_mssql
 ludus ansible collection add -l .
 ```
 
-2. Upload the SCORCH ISO
-
-```bash
-ludus range file-upload -f DVDSCORCH2022.iso
-```
-
-3. Set your config and deploy
+2. Set your config and deploy
 
 ```bash
 ludus range config set -f distributed.yml
@@ -86,52 +75,27 @@ ludus range deploy
 
 ### Required Roles
 
-The collection depends on `badsectorlabs.ludus_mssql` for SQL Server installation (auto-downloads, no ISO needed):
+The collection depends on `badsectorlabs.ludus_mssql` for SQL Server installation:
 
 ```bash
 ludus ansible role add badsectorlabs.ludus_mssql
 ```
 
-### Media Required
+### Media
 
-Upload the SCORCH ISO to your Ludus file share before deployment:
+**No manual uploads required!** Both SQL Server and SCORCH are automatically downloaded during deployment:
 
-| Media | Filename (example) | Size | Download |
-|-------|-------------------|------|----------|
-| System Center 2022 Orchestrator | `DVDSCORCH2022.iso` | ~800MB | See below |
+| Component | Source | Size |
+|-----------|--------|------|
+| SQL Server 2022 | Auto-downloaded by `badsectorlabs.ludus_mssql` | ~1.5GB |
+| SCORCH 2022 | Auto-downloaded from Microsoft Evaluation Center | ~258MB |
 
-### SCORCH Download Options
-
-**Option 1: Direct ISO Download (Recommended)**
+The SCORCH installer is downloaded from:
 ```
-https://go.microsoft.com/fwlink/p/?LinkID=2195531&clcid=0x409&culture=en-us&country=US
-```
-- 180-day evaluation, no product key required
-- ~800MB download
-
-**Option 2: Microsoft Evaluation Center**
-1. Go to [System Center 2022 Downloads](https://www.microsoft.com/en-us/evalcenter/download-system-center-2022)
-2. Click "System Center Orchestrator - 64-bit edition"
-
-**Option 3: Pre-built Evaluation VHD**
-- [Download VHD](https://www.microsoft.com/en-us/download/details.aspx?id=104039) (~15GB)
-- Pre-configured VM with SCORCH already installed
-- Good for quick testing without Ludus deployment
-
-**Option 4: Visual Studio Subscription / VLSC**
-- If you have VS subscription or Volume Licensing
-- Full retail ISO: `mu_system_center_2022_orchestrator_x64_dvd_*.iso`
-
-### Upload to Ludus
-
-```bash
-# Upload SCORCH ISO to Ludus file share
-ludus range file-upload -f DVDSCORCH2022.iso
+https://go.microsoft.com/fwlink/p/?LinkID=2195531
 ```
 
-The file will be available at `C:\ludus\` on Windows VMs.
-
-> **Note:** SQL Server is automatically downloaded by the `badsectorlabs.ludus_mssql` role - no ISO needed!
+This is a 180-day evaluation that requires no product key.
 
 ### Templates Required
 
@@ -201,7 +165,6 @@ Use: `ludus range config set -f distributed.yml`
 | `ludus_scorch_db_name` | `Orchestrator` | Database name |
 | `ludus_scorch_db_create_new` | `true` | Create new database |
 | `ludus_scorch_db_trust_cert` | `true` | Trust SQL Server certificate |
-| `ludus_scorch_sql_sa_password` | `SqlP@ssw0rd123!` | SQL SA password |
 
 ### Web Services
 

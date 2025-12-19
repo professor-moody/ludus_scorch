@@ -15,13 +15,14 @@
 # Deployment Time: ~60 minutes
 #
 # Prerequisites:
-#   1. Upload SCORCH 2022 ISO to Ludus file share
-#   2. Add the SQL role: ludus ansible roles add badsectorlabs.ludus_mssql
-#   3. Add the collection: ludus ansible collection add professor_moody.ludus_scorch
+#   1. Add the SQL role: ludus ansible role add badsectorlabs.ludus_mssql
+#   2. Add the collection: ludus ansible collection add professor_moody.ludus_scorch
 #
 # Usage:
 #   ludus range config set -f single-server.yml
 #   ludus range deploy
+#
+# Note: Both SQL Server and SCORCH are auto-downloaded - no ISO uploads needed!
 #
 
 ludus:
@@ -73,7 +74,6 @@ ludus:
       role: member
     roles:
       - professor_moody.ludus_scorch.disable_firewall
-      - professor_moody.ludus_scorch.prereqs
       - badsectorlabs.ludus_mssql
       - professor_moody.ludus_scorch.install_mgmt_server
       - professor_moody.ludus_scorch.install_webservices
@@ -84,8 +84,7 @@ ludus:
       ludus_mssql_version: "2022"
       ludus_mssql_install_ssms: true
       
-      # SCORCH
-      ludus_scorch_iso_path: "C:\\ludus\\DVDSCORCH2022.iso"
+      # SCORCH (auto-downloads from Microsoft!)
       ludus_scorch_components: "ManagementServer,RunbookServer,RunbookDesigner"
       ludus_scorch_svc_account: "scorch_svc"
       ludus_scorch_svc_password: "ScorchP@ss123!"

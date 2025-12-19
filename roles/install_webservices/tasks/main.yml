@@ -25,30 +25,72 @@
     msg: "SCORCH Web Services are already installed"
   when: scorch_web_check.stdout | trim == "installed"
 
-- name: Check if SCORCH ISO exists
-  ansible.windows.win_stat:
-    path: "{{ ludus_scorch_iso_path }}"
-  register: scorch_iso_stat
+# Check if setup already exists
+- name: Check if SCORCH setup already extracted
+  ansible.windows.win_find:
+    paths: "{{ ludus_scorch_setup_folder }}"
+    patterns: "SetupOrchestrator.exe"
+    recurse: yes
+  register: existing_setup
   when: scorch_web_check.stdout | trim == "not_installed"
+  failed_when: false
 
-- name: Fail if SCORCH ISO not found
-  ansible.builtin.fail:
-    msg: "SCORCH ISO not found at {{ ludus_scorch_iso_path }}"
+# Download if needed
+- name: Create ludus directory
+  ansible.windows.win_file:
+    path: "C:\\ludus"
+    state: directory
   when:
     - scorch_web_check.stdout | trim == "not_installed"
-    - not scorch_iso_stat.stat.exists | default(false)
+    - existing_setup.files | default([]) | length == 0
 
-- name: Mount SCORCH ISO
-  community.windows.win_disk_image:
-    image_path: "{{ ludus_scorch_iso_path }}"
-    state: present
-  register: scorch_iso_mount
+- name: Download SCORCH setup from Microsoft
+  ansible.windows.win_get_url:
+    url: "{{ ludus_scorch_download_url }}"
+    dest: "{{ ludus_scorch_setup_zip }}"
+    force: no
+  when:
+    - scorch_web_check.stdout | trim == "not_installed"
+    - existing_setup.files | default([]) | length == 0
+
+- name: Create SCORCH setup folder
+  ansible.windows.win_file:
+    path: "{{ ludus_scorch_setup_folder }}"
+    state: directory
+  when:
+    - scorch_web_check.stdout | trim == "not_installed"
+    - existing_setup.files | default([]) | length == 0
+
+- name: Extract SCORCH zip file
+  community.windows.win_unzip:
+    src: "{{ ludus_scorch_setup_zip }}"
+    dest: "{{ ludus_scorch_setup_folder }}"
+  when:
+    - scorch_web_check.stdout | trim == "not_installed"
+    - existing_setup.files | default([]) | length == 0
+
+# Find SetupOrchestrator.exe (in CdImage subfolder)
+- name: Find SetupOrchestrator.exe
+  ansible.windows.win_find:
+    paths: "{{ ludus_scorch_setup_folder }}"
+    patterns: "SetupOrchestrator.exe"
+    recurse: yes
+  register: setup_exe_find
   when: scorch_web_check.stdout | trim == "not_installed"
+
+- name: Fail if SetupOrchestrator.exe not found
+  ansible.builtin.fail:
+    msg: "SetupOrchestrator.exe not found in {{ ludus_scorch_setup_folder }}"
+  when:
+    - scorch_web_check.stdout | trim == "not_installed"
+    - setup_exe_find.files | length == 0
 
 - name: Set SCORCH setup path
   ansible.builtin.set_fact:
-    ludus_scorch_setup_path: "{{ scorch_iso_mount.mount_paths[0] }}SetupOrchestrator.exe"
-  when: scorch_iso_mount.mount_paths is defined
+    ludus_scorch_setup_path: "{{ setup_exe_find.files[0].path }}"
+  when:
+    - scorch_web_check.stdout | trim == "not_installed"
+    - setup_exe_find.files | length > 0
 
 - name: Add web service account to local Administrators
   ansible.windows.win_group_membership:
@@ -145,12 +187,6 @@
   register: console_install
   async: 1800
   poll: 60
-
-- name: Unmount SCORCH ISO
-  community.windows.win_disk_image:
-    image_path: "{{ ludus_scorch_iso_path }}"
-    state: absent
-  when: scorch_iso_mount.mount_paths is defined
 
 - name: Configure anonymous access for testing
   ansible.windows.win_shell: |
