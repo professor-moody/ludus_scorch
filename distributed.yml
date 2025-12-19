@@ -226,10 +226,10 @@ global_role_vars:
 # =============================================================================
 network:
   # Allow inter-VLAN routing (all SCORCH components need to communicate)
-  inter_vlan_default: allow
+  inter_vlan_default: ACCEPT
   
   # Allow internet for Windows updates and downloads during setup
-  external_default: allow
+  external_default: ACCEPT
   
   # Custom rules (optional)
   rules: []

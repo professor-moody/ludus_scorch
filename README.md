@@ -25,8 +25,6 @@ For the corresponding research and tools, see the [scorch-tools](https://github.
 
 ## Installation in [Ludus](https://ludus.cloud)
 
-### Option A: From Ansible Galaxy (Recommended)
-
 1. Add the required roles and collection to your Ludus server
 
 ```bash
@@ -45,41 +43,6 @@ ludus range deploy
 ```
 
 **No file uploads required!** Both SQL Server and SCORCH are automatically downloaded during deployment.
-
-### Option B: From Source (Git Clone)
-
-1. Clone the repository and build the collection
-
-```bash
-git clone https://github.com/professor-moody/ludus_scorch
-cd ludus_scorch
-
-# Build the collection tarball
-ansible-galaxy collection build
-
-# Serve it locally (in another terminal or background)
-python3 -m http.server 8080
-```
-
-2. Add the collection and dependencies to Ludus
-
-```bash
-# Add the SQL Server role dependency
-ludus ansible role add badsectorlabs.ludus_mssql
-
-# Add the collection from your local server
-ludus ansible collection add http://<your-ip>:8080/professor_moody-ludus_scorch-1.0.0.tar.gz
-```
-
-3. Set your config and deploy
-
-```bash
-ludus range config set -f distributed.yml
-ludus range deploy
-# Wait for the range to successfully deploy
-# You can watch the logs with `ludus range logs -f`
-# Or check the status with `ludus range status`
-```
 
 ## Prerequisites
 

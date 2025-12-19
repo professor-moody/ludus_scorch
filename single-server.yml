@@ -129,5 +129,5 @@ ludus:
       role: member
 
 network:
-  inter_vlan_default: allow
-  external_default: allow
+  inter_vlan_default: ACCEPT
+  external_default: ACCEPT
