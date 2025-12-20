@@ -22,10 +22,3 @@
     profiles:
       - Public
   ignore_errors: true
-
-- name: Ensure firewall service is running but profiles disabled
-  ansible.windows.win_service:
-    name: MpsSvc
-    state: started
-    start_mode: auto
-  ignore_errors: true
