@@ -14,7 +14,8 @@
     state: directory
 
 # =============================================================================
-# PREREQUISITES - SCORCH 2022 requires VC++ 2015-2022 and .NET 6 Hosting Bundle
+# PREREQUISITES - SCORCH 2022 requires VC++, IIS, .NET 5/6 Hosting Bundles
+# IMPORTANT: IIS must be installed BEFORE .NET Hosting Bundles for module registration
 # =============================================================================
 - name: Check if VC++ Redistributable is installed
   ansible.windows.win_shell: |
@@ -37,14 +38,7 @@
   when: vcredist_check.stdout | trim == "not_installed"
   register: vcredist_install
 
-- name: Check if .NET 6 Hosting Bundle is installed
-  ansible.windows.win_shell: |
-    $dotnet6 = Get-ItemProperty "HKLM:\SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.AspNetCore.App" -ErrorAction SilentlyContinue
-    if ($dotnet6) { Write-Output "installed" } else { Write-Output "not_installed" }
-  register: dotnet6_check
-  changed_when: false
-
-# IIS must be installed BEFORE .NET 6 Hosting Bundle for ASP.NET Core module registration
+# IIS MUST be installed BEFORE .NET Hosting Bundles for ASP.NET Core module registration
 - name: Install IIS with required features
   ansible.windows.win_feature:
     name:
@@ -73,6 +67,36 @@
       - NET-WCF-HTTP-Activation45
     state: present
   register: iis_install
+
+# .NET 5 Hosting Bundle - Required by SCORCH 2022 Web API
+- name: Check if .NET 5 Hosting Bundle is installed
+  ansible.windows.win_shell: |
+    $dotnet5 = Get-ItemProperty "HKLM:\SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.AspNetCore.App" -ErrorAction SilentlyContinue
+    if ($dotnet5 -and $dotnet5.PSObject.Properties.Name -match "5\.") { Write-Output "installed" } else { Write-Output "not_installed" }
+  register: dotnet5_check
+  changed_when: false
+
+- name: Download .NET 5 Hosting Bundle
+  ansible.windows.win_get_url:
+    url: "https://download.visualstudio.microsoft.com/download/pr/5cc93fce-45cc-4cfe-a206-be05c02814e3/0e9568e61d79ac7fa8c09d8937f9eb54/dotnet-hosting-5.0.17-win.exe"
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\dotnet-hosting-5.0.exe"
+  when: dotnet5_check.stdout | trim == "not_installed"
+
+- name: Install .NET 5 Hosting Bundle
+  ansible.windows.win_package:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\dotnet-hosting-5.0.exe"
+    arguments: /install /quiet /norestart
+    state: present
+  when: dotnet5_check.stdout | trim == "not_installed"
+  register: dotnet5_install
+
+# .NET 6 Hosting Bundle - Required by SCORCH 2022 Web API
+- name: Check if .NET 6 Hosting Bundle is installed
+  ansible.windows.win_shell: |
+    $dotnet6 = Get-ItemProperty "HKLM:\SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.AspNetCore.App" -ErrorAction SilentlyContinue
+    if ($dotnet6 -and $dotnet6.PSObject.Properties.Name -match "6\.") { Write-Output "installed" } else { Write-Output "not_installed" }
+  register: dotnet6_check
+  changed_when: false
 
 - name: Download .NET 6 Hosting Bundle
   ansible.windows.win_get_url:
@@ -158,7 +182,7 @@
 - name: Reboot if prerequisites were installed
   ansible.windows.win_reboot:
     reboot_timeout: 600
-  when: (vcredist_install.changed | default(false)) or (iis_install.changed | default(false)) or (dotnet6_install.changed | default(false)) or (oledb_install.changed | default(false)) or (urlrewrite_install.changed | default(false)) or (cors_install.changed | default(false))
+  when: (vcredist_install.changed | default(false)) or (iis_install.changed | default(false)) or (dotnet5_install.changed | default(false)) or (dotnet6_install.changed | default(false)) or (oledb_install.changed | default(false)) or (urlrewrite_install.changed | default(false)) or (cors_install.changed | default(false))
 
 - name: Check if SCORCH Web Services are already installed
   ansible.windows.win_shell: |
