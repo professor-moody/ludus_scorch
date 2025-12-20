@@ -155,36 +155,17 @@
         # Create runbook (policy)
         $runbookId = [System.Guid]::NewGuid().ToString()
         
-        # Create a basic runbook XML structure
-        $runbookXml = @"
-      <?xml version="1.0" encoding="utf-8"?>
-      <Policy xmlns="http://schemas.microsoft.com/SystemCenter/Orchestrator/2007/11/Policy">
-        <Name>$Name</Name>
-        <Description>$Description</Description>
-        <Activities>
-          <Activity>
-            <Name>Initialize Data</Name>
-            <Type>Initialize Data</Type>
-            <X>100</X>
-            <Y>100</Y>
-          </Activity>
-        </Activities>
-        <Links />
-      </Policy>
-      "@
-        
         $cmd = $Connection.CreateCommand()
         $cmd.CommandText = @"
           INSERT INTO [dbo].[POLICIES] 
-          (UniqueID, ParentID, Name, Description, PolicyXML, CheckedOutBy, CheckedOutTime, Deleted, LastModified, Version)
+          (UniqueID, ParentID, Name, Description, Deleted, LastModified, Version, Published)
           VALUES 
-          (@Id, @ParentId, @Name, @Description, @PolicyXML, NULL, NULL, 0, GETUTCDATE(), 1)
+          (@Id, @ParentId, @Name, @Description, 0, GETUTCDATE(), 1, 0)
       "@
         $cmd.Parameters.AddWithValue("@Id", $runbookId) | Out-Null
         $cmd.Parameters.AddWithValue("@ParentId", $folderId) | Out-Null
         $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
         $cmd.Parameters.AddWithValue("@Description", $Description) | Out-Null
-        $cmd.Parameters.AddWithValue("@PolicyXML", $runbookXml) | Out-Null
         $cmd.ExecuteNonQuery() | Out-Null
         
         Write-Output "Created runbook: $Name in $FolderPath"
