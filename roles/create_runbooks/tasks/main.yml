@@ -5,6 +5,41 @@
   ansible.builtin.set_fact:
     ludus_scorch_db_connection: "{{ ludus_scorch_db_server }}{% if ludus_scorch_db_instance | length > 0 %}\\{{ ludus_scorch_db_instance }}{% endif %}"
 
+- name: Build runbook creation commands
+  ansible.builtin.set_fact:
+    ludus_scorch_runbook_creation_commands: |
+      # Create folder structure
+      {% for folder in ludus_scorch_runbook_folders %}
+      Get-OrCreateFolder -Connection $conn -FolderPath "{{ folder.name }}"
+      {% for subfolder in folder.subfolders | default([]) %}
+      Get-OrCreateFolder -Connection $conn -FolderPath "{{ folder.name }}\\{{ subfolder }}"
+      {% endfor %}
+      {% endfor %}
+      
+      # Create sample runbooks
+      {% for runbook in ludus_scorch_sample_runbooks %}
+      New-Runbook -Connection $conn -Name "{{ runbook.name }}" -FolderPath "{{ runbook.folder }}" -Description "{{ runbook.description }}" -UsesCredentials ${{ runbook.uses_credentials | default(false) | lower }}
+      {% endfor %}
+      
+      # Create schedules
+      {% for schedule in ludus_scorch_schedules %}
+      New-Schedule -Connection $conn -Name "{{ schedule.name }}" -Pattern "{{ schedule.pattern }}" {% if schedule.time is defined %}-Time "{{ schedule.time }}"{% endif %} {% if schedule.day is defined %}-Day "{{ schedule.day }}"{% endif %}
+      {% endfor %}
+      
+      # Create global configurations (simulating Integration Pack settings)
+      New-GlobalConfiguration -Connection $conn -Name "SCOM_ManagementServer" -Value "scom-mgmt.corp.local" -Category "SCOM"
+      New-GlobalConfiguration -Connection $conn -Name "SCOM_RunAsAccount" -Value "CORP\\scom_action" -Category "SCOM"
+      New-GlobalConfiguration -Connection $conn -Name "Exchange_Server" -Value "exchange.corp.local" -Category "Exchange"
+      New-GlobalConfiguration -Connection $conn -Name "Exchange_AdminAccount" -Value "CORP\\exch_admin" -Category "Exchange"
+      New-GlobalConfiguration -Connection $conn -Name "ServiceNow_Instance" -Value "corpinc.service-now.com" -Category "ServiceNow"
+      New-GlobalConfiguration -Connection $conn -Name "ServiceNow_Username" -Value "api_orchestrator" -Category "ServiceNow"
+      New-GlobalConfiguration -Connection $conn -Name "VMware_vCenter" -Value "vcenter.corp.local" -Category "VMware"
+      New-GlobalConfiguration -Connection $conn -Name "VMware_Username" -Value "svc_orchestrator@vsphere.local" -Category "VMware"
+      New-GlobalConfiguration -Connection $conn -Name "Azure_TenantId" -Value "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Category "Azure"
+      New-GlobalConfiguration -Connection $conn -Name "Azure_SubscriptionId" -Value "12345678-abcd-ef12-3456-7890abcdef12" -Category "Azure"
+      New-GlobalConfiguration -Connection $conn -Name "AWS_Region" -Value "us-east-1" -Category "AWS"
+      New-GlobalConfiguration -Connection $conn -Name "AWS_AccountId" -Value "123456789012" -Category "AWS"
+
 - name: Wait for database connectivity
   ansible.windows.win_shell: |
     $retries = 0
@@ -259,41 +294,6 @@
         $conn.Close()
       }
     dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\Create-Runbooks.ps1"
-
-- name: Build runbook creation commands
-  ansible.builtin.set_fact:
-    ludus_scorch_runbook_creation_commands: |
-      # Create folder structure
-      {% for folder in ludus_scorch_runbook_folders %}
-      Get-OrCreateFolder -Connection $conn -FolderPath "{{ folder.name }}"
-      {% for subfolder in folder.subfolders | default([]) %}
-      Get-OrCreateFolder -Connection $conn -FolderPath "{{ folder.name }}\\{{ subfolder }}"
-      {% endfor %}
-      {% endfor %}
-      
-      # Create sample runbooks
-      {% for runbook in ludus_scorch_sample_runbooks %}
-      New-Runbook -Connection $conn -Name "{{ runbook.name }}" -FolderPath "{{ runbook.folder }}" -Description "{{ runbook.description }}" -UsesCredentials ${{ runbook.uses_credentials | default(false) | lower }}
-      {% endfor %}
-      
-      # Create schedules
-      {% for schedule in ludus_scorch_schedules %}
-      New-Schedule -Connection $conn -Name "{{ schedule.name }}" -Pattern "{{ schedule.pattern }}" {% if schedule.time is defined %}-Time "{{ schedule.time }}"{% endif %} {% if schedule.day is defined %}-Day "{{ schedule.day }}"{% endif %}
-      {% endfor %}
-      
-      # Create global configurations (simulating Integration Pack settings)
-      New-GlobalConfiguration -Connection $conn -Name "SCOM_ManagementServer" -Value "scom-mgmt.corp.local" -Category "SCOM"
-      New-GlobalConfiguration -Connection $conn -Name "SCOM_RunAsAccount" -Value "CORP\\scom_action" -Category "SCOM"
-      New-GlobalConfiguration -Connection $conn -Name "Exchange_Server" -Value "exchange.corp.local" -Category "Exchange"
-      New-GlobalConfiguration -Connection $conn -Name "Exchange_AdminAccount" -Value "CORP\\exch_admin" -Category "Exchange"
-      New-GlobalConfiguration -Connection $conn -Name "ServiceNow_Instance" -Value "corpinc.service-now.com" -Category "ServiceNow"
-      New-GlobalConfiguration -Connection $conn -Name "ServiceNow_Username" -Value "api_orchestrator" -Category "ServiceNow"
-      New-GlobalConfiguration -Connection $conn -Name "VMware_vCenter" -Value "vcenter.corp.local" -Category "VMware"
-      New-GlobalConfiguration -Connection $conn -Name "VMware_Username" -Value "svc_orchestrator@vsphere.local" -Category "VMware"
-      New-GlobalConfiguration -Connection $conn -Name "Azure_TenantId" -Value "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Category "Azure"
-      New-GlobalConfiguration -Connection $conn -Name "Azure_SubscriptionId" -Value "12345678-abcd-ef12-3456-7890abcdef12" -Category "Azure"
-      New-GlobalConfiguration -Connection $conn -Name "AWS_Region" -Value "us-east-1" -Category "AWS"
-      New-GlobalConfiguration -Connection $conn -Name "AWS_AccountId" -Value "123456789012" -Category "AWS"
 
 - name: Update script with runbook commands
   ansible.windows.win_shell: |
