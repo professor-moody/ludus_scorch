@@ -11,6 +11,56 @@
     path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}"
     state: directory
 
+# =============================================================================
+# PREREQUISITES - SCORCH 2022 requires VC++ 2015-2022 and .NET 6 Hosting Bundle
+# =============================================================================
+- name: Check if VC++ Redistributable is installed
+  ansible.windows.win_shell: |
+    $vcRedist = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64" -ErrorAction SilentlyContinue
+    if ($vcRedist -and $vcRedist.Version -ge "14.34") { Write-Output "installed" } else { Write-Output "not_installed" }
+  register: vcredist_check
+  changed_when: false
+
+- name: Download Visual C++ Redistributable 2015-2022
+  ansible.windows.win_get_url:
+    url: "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\vc_redist.x64.exe"
+  when: vcredist_check.stdout | trim == "not_installed"
+
+- name: Install Visual C++ Redistributable 2015-2022
+  ansible.windows.win_package:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\vc_redist.x64.exe"
+    arguments: /install /quiet /norestart
+    state: present
+  when: vcredist_check.stdout | trim == "not_installed"
+  register: vcredist_install
+
+- name: Check if .NET 6 Hosting Bundle is installed
+  ansible.windows.win_shell: |
+    $dotnet6 = Get-ItemProperty "HKLM:\SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.AspNetCore.App" -ErrorAction SilentlyContinue
+    if ($dotnet6) { Write-Output "installed" } else { Write-Output "not_installed" }
+  register: dotnet6_check
+  changed_when: false
+
+- name: Download .NET 6 Hosting Bundle
+  ansible.windows.win_get_url:
+    url: "https://download.visualstudio.microsoft.com/download/pr/eaa3eab9-cc21-44b5-a4e4-af31ee73b9fa/d8ad75d525dec0a30b52adc990796b11/dotnet-hosting-6.0.36-win.exe"
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\dotnet-hosting-6.0.exe"
+  when: dotnet6_check.stdout | trim == "not_installed"
+
+- name: Install .NET 6 Hosting Bundle
+  ansible.windows.win_package:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\dotnet-hosting-6.0.exe"
+    arguments: /install /quiet /norestart
+    state: present
+  when: dotnet6_check.stdout | trim == "not_installed"
+  register: dotnet6_install
+
+- name: Reboot if prerequisites were installed
+  ansible.windows.win_reboot:
+    reboot_timeout: 600
+  when: (vcredist_install.changed | default(false)) or (dotnet6_install.changed | default(false))
+
 - name: Check if SCORCH Management Server is already installed
   ansible.windows.win_service_info:
     name: OrchestratorManagement
