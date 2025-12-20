@@ -141,7 +141,7 @@
 
 - name: Download IIS CORS Module
   ansible.windows.win_get_url:
-    url: "https://download.microsoft.com/download/A/D/3/AD3D89DA-BEEF-4F25-9776-3AAB624AB60E/iiscors_amd64.msi"
+    url: "https://go.microsoft.com/fwlink/?linkid=862444"
     dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\iiscors_amd64.msi"
   when: cors_check.stdout | default('not_installed') | trim == "not_installed"
 
