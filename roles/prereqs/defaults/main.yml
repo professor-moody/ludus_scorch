@@ -48,7 +48,7 @@ ludus_scorch_iis_features:
 # IIS Modules (downloaded separately)
 ludus_scorch_install_iis_modules: true
 ludus_scorch_urlrewrite_url: "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi"
-ludus_scorch_cors_url: "https://download.microsoft.com/download/3/E/7/3E7F7F3A-DB77-4F2D-86BA-4E0530B7FE52/iiscors_amd64.msi"
+ludus_scorch_cors_url: "https://go.microsoft.com/fwlink/?linkid=862444"
 
 # Temp directory for installers
 ludus_scorch_temp_dir: "C:\\ludus_scorch_temp"
