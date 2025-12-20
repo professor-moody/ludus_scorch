@@ -41,6 +41,9 @@ ludus range deploy
 # Or check the status with `ludus range status`
 ```
 
+**No file uploads required** - everything is automatically downloaded during deployment.
+
+
 ## Prerequisites
 
 ### Required Roles
@@ -53,7 +56,7 @@ ludus ansible role add badsectorlabs.ludus_mssql
 
 ### Media
 
-**No manual uploads required!** Both SQL Server and SCORCH are automatically downloaded during deployment:
+Both SQL Server and SCORCH are automatically downloaded during deployment:
 
 | Component | Source | Size |
 |-----------|--------|------|
@@ -81,7 +84,7 @@ This is a 180-day evaluation that requires no product key.
 │    DC01     │      │           SCORCH                │
 │  Domain     │◄────►│  • SQL Server                   │
 │  Controller │      │  • Management Server            │
-│  + ADCS     │      │  • Runbook Server               │
+│             │      │  • Runbook Server               │
 └─────────────┘      │  • Web API (:81)                │
                      │  • Console (:82)                │
                      │  • Runbook Designer             │
@@ -99,7 +102,7 @@ Use: `ludus range config set -f single-server.yml`
 │    DC01     │      │ SCORCH-SQL  │      │ SCORCH-MGMT │
 │  Domain     │◄────►│ SQL Server  │◄────►│ Management  │
 │  Controller │      │  Database   │      │ Runbook Srv │
-│  + ADCS     │      └─────────────┘      │ Designer    │
+│             │      └─────────────┘      │ Designer    │
 └─────────────┘             ▲             └─────────────┘
                             │
          ┌──────────────────┼──────────────────┐
