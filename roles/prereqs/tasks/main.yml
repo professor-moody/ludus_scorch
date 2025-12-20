@@ -59,21 +59,38 @@
   register: vcredist_install
   failed_when: false
 
-- name: Download .NET Hosting Bundle
+- name: Download .NET 5 Hosting Bundle
   ansible.windows.win_get_url:
-    url: "{{ ludus_scorch_dotnet_hosting_url }}"
-    dest: "{{ ludus_scorch_temp_dir }}\\dotnet-hosting.exe"
+    url: "{{ ludus_scorch_dotnet5_hosting_url }}"
+    dest: "{{ ludus_scorch_temp_dir }}\\dotnet-hosting-5.0.exe"
     force: false
   when: ludus_scorch_install_dotnet_hosting
-  register: hosting_download
+  register: hosting5_download
 
-- name: Install .NET Hosting Bundle
+- name: Install .NET 5 Hosting Bundle
   ansible.windows.win_package:
-    path: "{{ ludus_scorch_temp_dir }}\\dotnet-hosting.exe"
-    arguments: /quiet /norestart
+    path: "{{ ludus_scorch_temp_dir }}\\dotnet-hosting-5.0.exe"
+    arguments: /install /quiet /norestart
     state: present
   when: ludus_scorch_install_dotnet_hosting
-  register: hosting_install
+  register: hosting5_install
+  failed_when: false
+
+- name: Download .NET 6 Hosting Bundle
+  ansible.windows.win_get_url:
+    url: "{{ ludus_scorch_dotnet6_hosting_url }}"
+    dest: "{{ ludus_scorch_temp_dir }}\\dotnet-hosting-6.0.exe"
+    force: false
+  when: ludus_scorch_install_dotnet_hosting
+  register: hosting6_download
+
+- name: Install .NET 6 Hosting Bundle
+  ansible.windows.win_package:
+    path: "{{ ludus_scorch_temp_dir }}\\dotnet-hosting-6.0.exe"
+    arguments: /install /quiet /norestart
+    state: present
+  when: ludus_scorch_install_dotnet_hosting
+  register: hosting6_install
   failed_when: false
 
 - name: Restart IIS after hosting bundle install
@@ -81,7 +98,7 @@
     if (Get-Service -Name W3SVC -ErrorAction SilentlyContinue) {
       iisreset /restart
     }
-  when: hosting_install.changed | default(false)
+  when: (hosting5_install.changed | default(false)) or (hosting6_install.changed | default(false))
   failed_when: false
 
 - name: Download IIS URL Rewrite Module

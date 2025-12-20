@@ -5,10 +5,10 @@
 ludus_scorch_install_dotnet35: false
 ludus_scorch_install_dotnet472: true
 
-# .NET Core/Hosting Bundle for Web API (SCORCH 2022+)
+# .NET 5 and .NET 6 Hosting Bundles - Required by SCORCH 2022 Web API
 ludus_scorch_install_dotnet_hosting: true
-ludus_scorch_dotnet_hosting_version: "8.0.11"
-ludus_scorch_dotnet_hosting_url: "https://download.visualstudio.microsoft.com/download/pr/8dc79cfe-4de8-4f37-8b16-53de7f27e504/5cdd4f6fcbbe145cd8e7fb693a5f8c27/dotnet-hosting-8.0.11-win.exe"
+ludus_scorch_dotnet5_hosting_url: "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/5.0.17/dotnet-hosting-5.0.17-win.exe"
+ludus_scorch_dotnet6_hosting_url: "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/6.0.36/dotnet-hosting-6.0.36-win.exe"
 
 # Visual C++ Redistributable
 ludus_scorch_install_vcredist: true
