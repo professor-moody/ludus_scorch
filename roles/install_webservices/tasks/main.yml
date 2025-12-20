@@ -281,6 +281,48 @@
   when: ludus_scorch_disable_ntlm_channel_binding
   failed_when: false
 
+# Grant SQL permissions for Web API service account
+- name: Grant SQL permissions for Web API service account
+  ansible.windows.win_shell: |
+    $server = "{{ ludus_scorch_db_connection }}"
+    $database = "{{ ludus_scorch_db_name }}"
+    $account = "{{ ludus_domain_netbios_name }}\{{ ludus_scorch_web_account }}"
+    
+    $connString = "Server=$server;Database=$database;Integrated Security=True;TrustServerCertificate={{ 'True' if ludus_scorch_db_trust_cert else 'False' }}"
+    $conn = New-Object System.Data.SqlClient.SqlConnection($connString)
+    $conn.Open()
+    
+    # Grant SELECT and EXECUTE on SCORCH schemas
+    $grants = @(
+      "GRANT SELECT ON SCHEMA::[Microsoft.SystemCenter.Orchestrator] TO [$account]",
+      "GRANT SELECT ON SCHEMA::[Microsoft.SystemCenter.Orchestrator.Internal] TO [$account]",
+      "GRANT EXECUTE ON SCHEMA::[Microsoft.SystemCenter.Orchestrator] TO [$account]",
+      "GRANT EXECUTE ON SCHEMA::[Microsoft.SystemCenter.Orchestrator.Internal] TO [$account]"
+    )
+    
+    foreach ($grant in $grants) {
+      try {
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandText = $grant
+        $cmd.ExecuteNonQuery() | Out-Null
+        Write-Host "Executed: $grant"
+      } catch {
+        Write-Host "Warning: $grant - $_"
+      }
+    }
+    
+    $conn.Close()
+    Write-Host "SQL permissions granted for Web API service account"
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ ludus_scorch_domain_admin }}'
+    ansible_become_password: '{{ ludus_scorch_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+  register: sql_grant_result
+  failed_when: false
+  changed_when: "'granted' in sql_grant_result.stdout"
+
 - name: Open firewall ports for web services
   community.windows.win_firewall_rule:
     name: "SCORCH {{ item.name }}"

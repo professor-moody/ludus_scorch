@@ -61,52 +61,182 @@
     state: present
   register: sql_disk_image
 
-# Install SQL Server using command line with runas (avoids DPAPI issues)
-- name: Install SQL Server (this will take a while)
+# Install SQL Server using scheduled task (avoids Session 0 DPAPI issues)
+- name: Check if SQL Server is already installed
+  ansible.windows.win_stat:
+    path: "C:\\Program Files\\Microsoft SQL Server\\MSSQL15.{{ ludus_scorch_sql_instance_name }}\\MSSQL\\Binn\\sqlservr.exe"
+  register: sql_server_installed
+
+- name: Create SQL install script
+  ansible.windows.win_copy:
+    content: |
+      # SQL Server Install Script
+      $logFile = "C:\ludus\sql\sql_install.log"
+      Start-Transcript -Path $logFile -Append
+      
+      $setupPath = "{{ sql_disk_image.mount_paths[0] }}setup.exe"
+      $args = @(
+        "/Q",
+        "/IAcceptSQLServerLicenseTerms",
+        "/ACTION=install",
+        "/FEATURES=SQLENGINE,FULLTEXT",
+        "/INSTANCENAME={{ ludus_scorch_sql_instance_name }}",
+        "/AGTSVCACCOUNT={{ ludus_domain_netbios_name }}\{{ ludus_scorch_sql_svc_account }}",
+        "/AGTSVCPASSWORD={{ ludus_scorch_sql_svc_password }}",
+        "/AGTSVCSTARTUPTYPE=Automatic",
+        "/SQLSVCACCOUNT={{ ludus_domain_netbios_name }}\{{ ludus_scorch_sql_svc_account }}",
+        "/SQLSVCPASSWORD={{ ludus_scorch_sql_svc_password }}",
+        "/SQLSYSADMINACCOUNTS={{ ludus_domain_netbios_name }}\{{ defaults.ad_domain_admin }}",
+        "/SQLMINMEMORY={{ ludus_scorch_sql_min_memory }}",
+        "/SQLMAXMEMORY={{ ludus_scorch_sql_max_memory }}",
+        "/SQLSVCINSTANTFILEINIT=True",
+        "/TCPENABLED=1"
+      )
+      
+      Write-Host "Starting SQL Server installation..."
+      $process = Start-Process -FilePath $setupPath -ArgumentList $args -Wait -PassThru -NoNewWindow
+      Write-Host "SQL Server installation completed with exit code: $($process.ExitCode)"
+      
+      Stop-Transcript
+      exit $process.ExitCode
+    dest: "{{ ludus_scorch_sql_temp_dir }}\\Install-SQLServer.ps1"
+  when: not sql_server_installed.stat.exists
+
+- name: Create scheduled task for SQL install
+  community.windows.win_scheduled_task:
+    name: LudusSQLInstall
+    description: "Ludus SQL Server Install Task"
+    actions:
+      - path: powershell.exe
+        arguments: "-ExecutionPolicy Bypass -File {{ ludus_scorch_sql_temp_dir }}\\Install-SQLServer.ps1"
+    triggers:
+      - type: registration
+    username: "{{ ludus_domain_fqdn }}\\{{ defaults.ad_domain_admin }}"
+    password: "{{ defaults.ad_domain_admin_password }}"
+    logon_type: interactive_token
+    run_level: highest
+    state: present
+  when: not sql_server_installed.stat.exists
+
+- name: Run the SQL install scheduled task
+  community.windows.win_scheduled_task:
+    name: LudusSQLInstall
+    state: present
+    enabled: true
+  when: not sql_server_installed.stat.exists
+
+- name: Execute the SQL install task
   ansible.windows.win_shell: |
-    {{ sql_disk_image.mount_paths[0] }}setup.exe /Q /IAcceptSQLServerLicenseTerms /ACTION="install" /FEATURES=SQLENGINE,FULLTEXT /INSTANCENAME={{ ludus_scorch_sql_instance_name }} /AGTSVCACCOUNT="{{ ludus_domain_netbios_name }}\{{ ludus_scorch_sql_svc_account }}" /AGTSVCPASSWORD="{{ ludus_scorch_sql_svc_password }}" /AGTSVCSTARTUPTYPE=Automatic /SQLSVCACCOUNT="{{ ludus_domain_netbios_name }}\{{ ludus_scorch_sql_svc_account }}" /SQLSVCPASSWORD="{{ ludus_scorch_sql_svc_password }}" /SQLSYSADMINACCOUNTS="{{ ludus_domain_netbios_name }}\{{ defaults.ad_domain_admin }}" /SQLMINMEMORY="{{ ludus_scorch_sql_min_memory }}" /SQLMAXMEMORY="{{ ludus_scorch_sql_max_memory }}" /SQLSVCINSTANTFILEINIT=True /TCPENABLED=1
-  vars:
-    ansible_become: true
-    ansible_become_method: runas
-    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
-    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
-    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
-  args:
-    creates: "C:\\Program Files\\Microsoft SQL Server\\MSSQL15.{{ ludus_scorch_sql_instance_name }}\\MSSQL\\Binn\\sqlservr.exe"
+    Start-ScheduledTask -TaskName "LudusSQLInstall"
+  when: not sql_server_installed.stat.exists
+
+- name: Wait for SQL install task to complete
+  ansible.windows.win_shell: |
+    $timeout = 1800  # 30 minutes
+    $elapsed = 0
+    while ($elapsed -lt $timeout) {
+      $task = Get-ScheduledTask -TaskName "LudusSQLInstall" -ErrorAction SilentlyContinue
+      if ($task.State -ne "Running") {
+        $info = Get-ScheduledTaskInfo -TaskName "LudusSQLInstall"
+        exit $info.LastTaskResult
+      }
+      Start-Sleep -Seconds 30
+      $elapsed += 30
+    }
+    exit 1  # Timeout
   register: sql_install_result
+  when: not sql_server_installed.stat.exists
   failed_when: >
     sql_install_result.rc != 0 and
-    "One or more affected files have operations pending" not in sql_install_result.stdout
-  changed_when: >
-    sql_install_result.rc == 0 or
-    "One or more affected files have operations pending" in sql_install_result.stdout
+    sql_install_result.rc != 3010
 
-- name: Reboot if SQL Server installation requires it
+- name: Remove SQL install scheduled task
+  community.windows.win_scheduled_task:
+    name: LudusSQLInstall
+    state: absent
+
+- name: Check SQL install log
+  ansible.windows.win_shell: |
+    if (Test-Path "C:\ludus\sql\sql_install.log") {
+      Get-Content "C:\ludus\sql\sql_install.log" -Tail 50
+    } else {
+      Write-Host "No log file found"
+    }
+  register: sql_install_log
+  changed_when: false
+
+- name: Display SQL install log
+  ansible.builtin.debug:
+    var: sql_install_log.stdout_lines
+  when: sql_install_log.stdout_lines is defined
+
+- name: Reboot if SQL Server installation requires it (exit code 3010)
   ansible.windows.win_reboot:
     reboot_timeout: 600
   when:
     - sql_install_result is defined
-    - sql_install_result.stdout is defined
-    - "'One or more affected files have operations pending' in sql_install_result.stdout"
+    - sql_install_result.rc is defined
+    - sql_install_result.rc == 3010
 
 - name: Unmount SQL ISO
   community.windows.win_disk_image:
     image_path: "{{ ludus_scorch_sql_temp_dir }}\\{{ ludus_scorch_sql_iso_name }}"
     state: absent
 
+# Verify SQL Server services are running
+- name: Ensure SQL Server service is running
+  ansible.windows.win_service:
+    name: "MSSQLSERVER"
+    state: started
+    start_mode: auto
+  register: sql_service_result
+  retries: 3
+  delay: 10
+  until: sql_service_result is succeeded
+
+- name: Ensure SQL Server Agent service is running
+  ansible.windows.win_service:
+    name: "SQLSERVERAGENT"
+    state: started
+    start_mode: auto
+  register: sqlagent_service_result
+  retries: 3
+  delay: 10
+  until: sqlagent_service_result is succeeded
+
+- name: Verify SQL Server is accessible
+  ansible.windows.win_shell: |
+    $conn = New-Object System.Data.SqlClient.SqlConnection
+    $conn.ConnectionString = "Server=localhost;Integrated Security=True;TrustServerCertificate=True"
+    try {
+      $conn.Open()
+      $cmd = $conn.CreateCommand()
+      $cmd.CommandText = "SELECT @@VERSION"
+      $version = $cmd.ExecuteScalar()
+      $conn.Close()
+      Write-Host "SQL Server is running: $version"
+      exit 0
+    } catch {
+      Write-Host "Failed to connect: $_"
+      exit 1
+    }
+  register: sql_verify_result
+  retries: 3
+  delay: 10
+  until: sql_verify_result.rc == 0
+  changed_when: false
+
 # Install SSMS if requested
 - name: Install SSMS
   ansible.builtin.include_tasks: install_ssms.yml
   when: ludus_scorch_sql_install_ssms | default(true)
-
-# Final reboot after all installations
-- name: Reboot after SQL installation
-  ansible.windows.win_reboot:
-    reboot_timeout: 600
-  when: sql_install_result.changed | default(false)
 
 # Cleanup
 - name: Remove SQL ISO from Windows host
   ansible.windows.win_file:
     path: "{{ ludus_scorch_sql_temp_dir }}\\{{ ludus_scorch_sql_iso_name }}"
     state: absent
+
+- name: Display final SQL Server status
+  ansible.builtin.debug:
+    msg: "SQL Server {{ ludus_scorch_sql_version }} installed and verified successfully"

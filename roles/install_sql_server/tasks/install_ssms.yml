@@ -3,7 +3,7 @@
 
 - name: Check if SSMS is installed
   ansible.windows.win_stat:
-    path: "C:\\Program Files (x86)\\Microsoft SQL Server Management Studio 20\\Common7\\IDE\\Ssms.exe"
+    path: "C:\\Program Files (x86)\\Microsoft SQL Server Management Studio {{ ludus_scorch_ssms_version }}\\Common7\\IDE\\Ssms.exe"
   register: ssms_installed
 
 - name: Download SSMS installer
@@ -22,7 +22,7 @@
     ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
     ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
   args:
-    creates: "C:\\Program Files (x86)\\Microsoft SQL Server Management Studio 20\\Common7\\IDE\\Ssms.exe"
+    creates: "C:\\Program Files (x86)\\Microsoft SQL Server Management Studio {{ ludus_scorch_ssms_version }}\\Common7\\IDE\\Ssms.exe"
   when: not ssms_installed.stat.exists
   register: ssms_install_result
 
