@@ -2,7 +2,7 @@
 # SCORCH Prerequisites Configuration
 
 # .NET Framework versions
-ludus_scorch_install_dotnet35: true
+ludus_scorch_install_dotnet35: false
 ludus_scorch_install_dotnet472: true
 
 # .NET Core/Hosting Bundle for Web API (SCORCH 2022+)
