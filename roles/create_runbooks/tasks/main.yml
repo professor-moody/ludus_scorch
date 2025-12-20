@@ -23,7 +23,8 @@
       
       # Create schedules
       {% for schedule in ludus_scorch_schedules %}
-      New-Schedule -Connection $conn -Name "{{ schedule.name }}" -Pattern "{{ schedule.pattern }}" {% if schedule.time is defined %}-Time "{{ schedule.time }}"{% endif %} {% if schedule.day is defined %}-Day "{{ schedule.day }}"{% endif %}
+      New-Schedule -Connection $conn -Name "{{ schedule.name }}" -Pattern "{{ schedule.pattern }}"{% if schedule.time is defined %} -Time "{{ schedule.time }}"{% endif %}{% if schedule.day is defined %} -Day "{{ schedule.day }}"{% endif %}
+
       {% endfor %}
       
       # Create global configurations (simulating Integration Pack settings)
