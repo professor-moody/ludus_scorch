@@ -60,6 +60,9 @@ ludus:
       ludus_scorch_users_group: "OrchestratorUsers"
       ludus_scorch_admins_group: "OrchestratorAdmins"
       ludus_scorch_domain_admin: "domainadmin"
+      # Realistic misconfiguration: Domain Users can access SCORCH web interfaces
+      ludus_scorch_additional_users:
+        - "Domain Users"
 
   # =============================================================================
   # SQL SERVER
@@ -107,6 +110,8 @@ ludus:
       - professor_moody.ludus_scorch.disable_firewall
       - professor_moody.ludus_scorch.prereqs
       - professor_moody.ludus_scorch.install_mgmt_server
+      - professor_moody.ludus_scorch.create_variables
+      - professor_moody.ludus_scorch.create_runbooks
     role_vars:
       # SCORCH installation (auto-downloads from Microsoft!)
       ludus_scorch_components: "ManagementServer,RunbookServer,RunbookDesigner"
@@ -124,6 +129,10 @@ ludus:
       # Group
       ludus_scorch_users_group: "OrchestratorUsers"
       ludus_scorch_enable_remote_designer: true
+      # Test variables for credential extraction
+      ludus_scorch_create_default_vars: true
+      # Create sample runbooks
+      ludus_scorch_create_default_runbooks: true
 
   # =============================================================================
   # RUNBOOK SERVER (Secondary - for HA)
@@ -183,8 +192,6 @@ ludus:
       - professor_moody.ludus_scorch.disable_firewall
       - professor_moody.ludus_scorch.prereqs
       - professor_moody.ludus_scorch.install_webservices
-      - professor_moody.ludus_scorch.create_variables
-      - professor_moody.ludus_scorch.create_runbooks
     role_vars:
       # SCORCH installation (auto-downloads from Microsoft!)
       ludus_scorch_components: "WebAPI,WebConsole"
@@ -201,10 +208,6 @@ ludus:
       # Security testing options
       ludus_scorch_enable_anonymous_access: false  # Set true for unauthenticated testing
       ludus_scorch_disable_ntlm_channel_binding: true  # Enable NTLM relay attacks
-      # Test variables for credential extraction
-      ludus_scorch_create_default_vars: true
-      # Create sample runbooks
-      ludus_scorch_create_default_runbooks: true
       # Domain admin credentials for scheduled task
       ludus_scorch_domain_admin: "domainadmin"
       ludus_scorch_domain_admin_password: "password"
