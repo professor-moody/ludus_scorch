@@ -66,18 +66,18 @@
     - scorch_rb_service.services | length == 0
     - existing_setup.files | default([]) | length == 0
 
-# Find SetupOrchestrator.exe (in CdImage subfolder)
-- name: Find SetupOrchestrator.exe
+# Find Setup.exe (in CdImage/Setup subfolder - required for silent install)
+- name: Find Setup.exe
   ansible.windows.win_find:
     paths: "{{ ludus_scorch_setup_folder }}"
-    patterns: "SetupOrchestrator.exe"
+    patterns: "Setup.exe"
     recurse: yes
   register: setup_exe_find
   when: scorch_rb_service.services | length == 0
 
-- name: Fail if SetupOrchestrator.exe not found
+- name: Fail if Setup.exe not found
   ansible.builtin.fail:
-    msg: "SetupOrchestrator.exe not found in {{ ludus_scorch_setup_folder }}"
+    msg: "Setup.exe not found in {{ ludus_scorch_setup_folder }}"
   when:
     - scorch_rb_service.services | length == 0
     - setup_exe_find.files | length == 0
