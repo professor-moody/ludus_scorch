@@ -5,8 +5,9 @@
   ansible.builtin.set_fact:
     ludus_scorch_web_account_full: "{{ ludus_domain_netbios_name | default('YOURNAMESPACE') }}\\{{ ludus_scorch_web_account }}"
     ludus_scorch_db_connection: "{{ ludus_scorch_db_server }}{% if ludus_scorch_db_instance | length > 0 %}\\{{ ludus_scorch_db_instance }}{% endif %}"
-    ludus_scorch_api_url: "{{ ludus_scorch_api_public_url | default('http://' + ansible_fqdn + ':' + ludus_scorch_api_port | string) }}"
-    ludus_scorch_console_url: "{{ ludus_scorch_console_public_url | default('http://' + ansible_fqdn + ':' + ludus_scorch_console_port | string) }}"
+    ludus_scorch_api_url: "{{ ludus_scorch_api_public_url | default('http://' + ansible_fqdn + ':' + ludus_scorch_api_port | string + '/Orchestrator2012/Orchestrator.svc', true) }}"
+    ludus_scorch_console_url: "{{ ludus_scorch_console_public_url | default('http://' + ansible_fqdn + ':' + ludus_scorch_console_port | string, true) }}"
+
 
 - name: Create temp directory
   ansible.windows.win_file:
@@ -139,50 +140,17 @@
       $setupPath = "{{ ludus_scorch_setup_path }}"
       $exitCodeFile = "{{ ludus_scorch_temp_dir | default('C:\\ludus_scorch_temp') }}\scorch_web_exit_code.txt"
       
-      # Install Web API first
-      Write-Output "Installing SCORCH Web API..."
-      $apiArgs = @(
+      # Install WebAPI and WebConsole together in one command
+      Write-Output "Installing SCORCH Web Services (WebAPI + WebConsole)..."
+      $installArgs = @(
         '/Silent',
         '/ServiceUserName:{{ ludus_scorch_web_account_full }}',
         '/ServicePassword:{{ ludus_scorch_web_password }}',
-        '/Components:WebAPI',
+        '/Components:WebAPI,WebConsole',
         '/DbServer:{{ ludus_scorch_db_connection }}',
         '/DbNameExisting:{{ ludus_scorch_db_name }}',
         '/TrustServerCertificate:{{ ludus_scorch_db_trust_cert | lower }}',
         '/WebServicePort:{{ ludus_scorch_api_port }}',
-        '/WebConsolePublicUrl:"{{ ludus_scorch_console_url }}"',
-        '/UseMicrosoftUpdate:{% if ludus_scorch_use_microsoft_update %}1{% else %}0{% endif %}',
-        '/SendTelemetryReports:{% if ludus_scorch_send_telemetry %}1{% else %}0{% endif %}',
-        '/EnableErrorReporting:{{ ludus_scorch_error_reporting }}'
-      )
-      
-      Write-Output "Web API Arguments: $($apiArgs -join ' ')"
-      
-      try {
-        $process = Start-Process -FilePath $setupPath -ArgumentList $apiArgs -Wait -PassThru -NoNewWindow
-        $apiExitCode = $process.ExitCode
-        Write-Output "Web API installation completed with exit code: $apiExitCode"
-        
-        if ($apiExitCode -ne 0 -and $apiExitCode -ne 3010) {
-          Write-Error "Web API installation failed"
-          $apiExitCode | Out-File -FilePath $exitCodeFile -Force
-          Stop-Transcript
-          exit $apiExitCode
-        }
-      } catch {
-        Write-Error "Web API installation failed: $_"
-        999 | Out-File -FilePath $exitCodeFile -Force
-        Stop-Transcript
-        exit 999
-      }
-      
-      # Install Orchestration Console
-      Write-Output "Installing SCORCH Orchestration Console..."
-      $consoleArgs = @(
-        '/Silent',
-        '/ServiceUserName:{{ ludus_scorch_web_account_full }}',
-        '/ServicePassword:{{ ludus_scorch_web_password }}',
-        '/Components:WebConsole',
         '/WebConsolePort:{{ ludus_scorch_console_port }}',
         '/WebServicePublicUrl:"{{ ludus_scorch_api_url }}"',
         '/UseMicrosoftUpdate:{% if ludus_scorch_use_microsoft_update %}1{% else %}0{% endif %}',
@@ -190,17 +158,26 @@
         '/EnableErrorReporting:{{ ludus_scorch_error_reporting }}'
       )
       
-      Write-Output "Console Arguments: $($consoleArgs -join ' ')"
+      Write-Output "Install Arguments: $($installArgs -join ' ')"
       
       try {
-        $process = Start-Process -FilePath $setupPath -ArgumentList $consoleArgs -Wait -PassThru -NoNewWindow
-        $consoleExitCode = $process.ExitCode
-        Write-Output "Console installation completed with exit code: $consoleExitCode"
-        $consoleExitCode | Out-File -FilePath $exitCodeFile -Force
+        $process = Start-Process -FilePath $setupPath -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
+        $exitCode = $process.ExitCode
+        Write-Output "Installation completed with exit code: $exitCode"
+        
+        if ($exitCode -ne 0 -and $exitCode -ne 3010 -and $exitCode -ne -15) {
+          Write-Error "Web Services installation failed with exit code: $exitCode"
+          $exitCode | Out-File -FilePath $exitCodeFile -Force
+          Stop-Transcript
+          exit $exitCode
+        }
+        
+        # Success - write exit code file
+        $exitCode | Out-File -FilePath $exitCodeFile -Force
         Stop-Transcript
-        exit $consoleExitCode
+        exit $exitCode
       } catch {
-        Write-Error "Console installation failed: $_"
+        Write-Error "Web Services installation failed: $_"
         999 | Out-File -FilePath $exitCodeFile -Force
         Stop-Transcript
         exit 999
