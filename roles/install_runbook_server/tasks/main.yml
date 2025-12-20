@@ -13,7 +13,7 @@
 
 - name: Check if SCORCH Runbook Server is already installed
   ansible.windows.win_service_info:
-    name: OrchestratorRunbook
+    name: orunbook
   register: scorch_rb_service
   failed_when: false
 
@@ -217,7 +217,7 @@
 
 - name: Wait for Runbook Server service to start
   ansible.windows.win_service:
-    name: OrchestratorRunbook
+    name: orunbook
     state: started
     start_mode: auto
   register: rb_service
@@ -227,7 +227,7 @@
 
 - name: Verify Runbook Server is running
   ansible.windows.win_shell: |
-    $service = Get-Service -Name OrchestratorRunbook
+    $service = Get-Service -Name orunbook
     Write-Output "Runbook Server Status: $($service.Status)"
   register: rb_verify
   changed_when: false

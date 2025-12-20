@@ -13,7 +13,7 @@
 
 - name: Check if SCORCH Management Server is already installed
   ansible.windows.win_service_info:
-    name: OrchestratorManagement
+    name: omanagement
   register: scorch_mgmt_service
   failed_when: false
 
@@ -267,7 +267,7 @@
 
 - name: Wait for Management Server service to start
   ansible.windows.win_service:
-    name: OrchestratorManagement
+    name: omanagement
     state: started
     start_mode: auto
   register: mgmt_service
@@ -277,7 +277,7 @@
 
 - name: Verify Management Server is running
   ansible.windows.win_shell: |
-    $service = Get-Service -Name OrchestratorManagement
+    $service = Get-Service -Name omanagement
     Write-Output "Management Server Status: $($service.Status)"
     if ($service.Status -eq 'Running') { exit 0 } else { exit 1 }
   register: mgmt_verify
