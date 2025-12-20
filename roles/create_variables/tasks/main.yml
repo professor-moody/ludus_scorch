@@ -53,6 +53,21 @@
       
       $ErrorActionPreference = "Stop"
       
+      # Variable type GUID from OBJECTTYPES table
+      $VariableTypeGuid = [System.Guid]::Parse("2e88bb5a-62f9-482e-84b0-4d963c987231")
+      $RootVariablesFolderGuid = [System.Guid]::Parse("00000000-0000-0000-0000-000000000005")
+      
+      # Helper function to add GUID parameters properly
+      function Add-GuidParameter {
+        param($cmd, $name, $value)
+        $param = $cmd.Parameters.Add($name, [System.Data.SqlDbType]::UniqueIdentifier)
+        if ($value -is [System.Guid]) {
+          $param.Value = $value
+        } else {
+          $param.Value = [System.Guid]::Parse($value.ToString())
+        }
+      }
+      
       $connectionString = "Server=$DbServer;Database=$DbName;Integrated Security=True;TrustServerCertificate=True"
       $conn = New-Object System.Data.SqlClient.SqlConnection($connectionString)
       $conn.Open()
@@ -60,7 +75,7 @@
       try {
         # Get or create folder structure
         $folderParts = $FolderPath -split '\\'
-        $parentId = '00000000-0000-0000-0000-000000000005'  # Root Variables folder
+        $parentId = $RootVariablesFolderGuid
         
         foreach ($folderName in $folderParts) {
           if ([string]::IsNullOrWhiteSpace($folderName)) { continue }
@@ -69,21 +84,21 @@
           $cmd = $conn.CreateCommand()
           $cmd.CommandText = "SELECT UniqueID FROM [dbo].[FOLDERS] WHERE Name = @Name AND ParentID = @ParentId"
           $cmd.Parameters.AddWithValue("@Name", $folderName) | Out-Null
-          $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
+          Add-GuidParameter $cmd "@ParentId" $parentId
           $existingFolderId = $cmd.ExecuteScalar()
           
           if ($existingFolderId) {
-            $parentId = $existingFolderId
+            $parentId = [System.Guid]::Parse($existingFolderId.ToString())
           } else {
             # Create folder
-            $newFolderId = [System.Guid]::NewGuid().ToString()
+            $newFolderId = [System.Guid]::NewGuid()
             $cmd = $conn.CreateCommand()
             $cmd.CommandText = @"
               INSERT INTO [dbo].[FOLDERS] (UniqueID, ParentID, Name, Description, Deleted, LastModified)
               VALUES (@FolderId, @ParentId, @Name, '', 0, GETUTCDATE())
       "@
-            $cmd.Parameters.AddWithValue("@FolderId", $newFolderId) | Out-Null
-            $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
+            Add-GuidParameter $cmd "@FolderId" $newFolderId
+            Add-GuidParameter $cmd "@ParentId" $parentId
             $cmd.Parameters.AddWithValue("@Name", $folderName) | Out-Null
             $cmd.ExecuteNonQuery() | Out-Null
             $parentId = $newFolderId
@@ -94,7 +109,7 @@
         $cmd = $conn.CreateCommand()
         $cmd.CommandText = "SELECT o.UniqueID FROM [dbo].[OBJECTS] o WHERE o.Name = @Name AND o.ParentID = @ParentId AND o.Deleted = 0"
         $cmd.Parameters.AddWithValue("@Name", $VariableName) | Out-Null
-        $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
+        Add-GuidParameter $cmd "@ParentId" $parentId
         $existingVarId = $cmd.ExecuteScalar()
         
         if ($existingVarId) {
@@ -102,28 +117,29 @@
           $cmd = $conn.CreateCommand()
           $cmd.CommandText = "UPDATE [dbo].[VARIABLES] SET Value = @Value WHERE UniqueID = @VarId"
           $cmd.Parameters.AddWithValue("@Value", $VariableValue) | Out-Null
-          $cmd.Parameters.AddWithValue("@VarId", $existingVarId) | Out-Null
+          Add-GuidParameter $cmd "@VarId" $existingVarId
           $cmd.ExecuteNonQuery() | Out-Null
           Write-Output "Updated variable: $VariableName"
         } else {
           # Create new variable
-          $objectId = [System.Guid]::NewGuid().ToString()
+          $objectId = [System.Guid]::NewGuid()
           
-          # Insert into OBJECTS table
+          # Insert into OBJECTS table with correct ObjectType GUID
           $cmd = $conn.CreateCommand()
           $cmd.CommandText = @"
             INSERT INTO [dbo].[OBJECTS] (UniqueID, ParentID, Name, ObjectType, Deleted, LastModified)
-            VALUES (@ObjectId, @ParentId, @Name, 'Variable', 0, GETUTCDATE())
+            VALUES (@ObjectId, @ParentId, @Name, @ObjectType, 0, GETUTCDATE())
       "@
-          $cmd.Parameters.AddWithValue("@ObjectId", $objectId) | Out-Null
-          $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
+          Add-GuidParameter $cmd "@ObjectId" $objectId
+          Add-GuidParameter $cmd "@ParentId" $parentId
           $cmd.Parameters.AddWithValue("@Name", $VariableName) | Out-Null
+          Add-GuidParameter $cmd "@ObjectType" $VariableTypeGuid
           $cmd.ExecuteNonQuery() | Out-Null
           
           # Insert into VARIABLES table
           $cmd = $conn.CreateCommand()
           $cmd.CommandText = "INSERT INTO [dbo].[VARIABLES] (UniqueID, Value) VALUES (@ObjectId, @Value)"
-          $cmd.Parameters.AddWithValue("@ObjectId", $objectId) | Out-Null
+          Add-GuidParameter $cmd "@ObjectId" $objectId
           $cmd.Parameters.AddWithValue("@Value", $VariableValue) | Out-Null
           $cmd.ExecuteNonQuery() | Out-Null
           
