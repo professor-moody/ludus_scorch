@@ -1,0 +1,112 @@
+---
+# Main tasks for install_sql_server role
+# Installs SQL Server for SCORCH Orchestrator database
+
+- name: Enable Windows Update service
+  ansible.windows.win_service:
+    name: Windows Update
+    state: started
+    start_mode: auto
+
+- name: Install required Windows features
+  ansible.windows.win_feature:
+    name:
+      - NET-Framework-Core
+      - NET-Framework-45-Core
+      - RSAT-AD-PowerShell
+    state: present
+
+- name: Create SQL temp directory
+  ansible.windows.win_file:
+    path: "{{ ludus_scorch_sql_temp_dir }}"
+    state: directory
+
+# Download SQL ISO to Ludus server first
+- name: Create ISO directory on Ludus server
+  ansible.builtin.file:
+    path: "{{ ludus_install_directory }}/resources/iso"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+
+- name: Check if SQL ISO exists on Ludus server
+  ansible.builtin.stat:
+    path: "{{ ludus_install_directory }}/resources/iso/{{ ludus_scorch_sql_iso_name }}"
+  register: sql_iso_stat
+  delegate_to: localhost
+
+- name: Download SQL Server ISO (this will take a while)
+  ansible.builtin.get_url:
+    url: "{{ ludus_scorch_sql_iso_url }}"
+    dest: "{{ ludus_install_directory }}/resources/iso/{{ ludus_scorch_sql_iso_name }}"
+    mode: '0644'
+  delegate_to: localhost
+  when: not sql_iso_stat.stat.exists
+
+# Copy ISO to Windows host
+- name: Check if SQL ISO exists on Windows host
+  ansible.windows.win_stat:
+    path: "{{ ludus_scorch_sql_temp_dir }}\\{{ ludus_scorch_sql_iso_name }}"
+  register: sql_iso_windows_stat
+
+- name: Copy SQL ISO to Windows host
+  ansible.builtin.copy:
+    src: "{{ ludus_install_directory }}/resources/iso/{{ ludus_scorch_sql_iso_name }}"
+    dest: "{{ ludus_scorch_sql_temp_dir }}\\{{ ludus_scorch_sql_iso_name }}"
+  when: not sql_iso_windows_stat.stat.exists
+
+- name: Mount SQL ISO
+  community.windows.win_disk_image:
+    image_path: "{{ ludus_scorch_sql_temp_dir }}\\{{ ludus_scorch_sql_iso_name }}"
+    state: present
+  register: sql_disk_image
+
+# Install SQL Server using command line with runas (avoids DPAPI issues)
+- name: Install SQL Server (this will take a while)
+  ansible.windows.win_shell: |
+    {{ sql_disk_image.mount_paths[0] }}setup.exe /Q /IAcceptSQLServerLicenseTerms /ACTION="install" /FEATURES=SQLENGINE,FULLTEXT /INSTANCENAME={{ ludus_scorch_sql_instance_name }} /AGTSVCACCOUNT="{{ ludus_domain_netbios_name }}\{{ ludus_scorch_sql_svc_account }}" /AGTSVCPASSWORD="{{ ludus_scorch_sql_svc_password }}" /AGTSVCSTARTUPTYPE=Automatic /SQLSVCACCOUNT="{{ ludus_domain_netbios_name }}\{{ ludus_scorch_sql_svc_account }}" /SQLSVCPASSWORD="{{ ludus_scorch_sql_svc_password }}" /SQLSYSADMINACCOUNTS="{{ ludus_domain_netbios_name }}\{{ defaults.ad_domain_admin }}" /SQLMINMEMORY="{{ ludus_scorch_sql_min_memory }}" /SQLMAXMEMORY="{{ ludus_scorch_sql_max_memory }}" /SQLSVCINSTANTFILEINIT=True /TCPENABLED=1
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+  args:
+    creates: "C:\\Program Files\\Microsoft SQL Server\\MSSQL15.{{ ludus_scorch_sql_instance_name }}\\MSSQL\\Binn\\sqlservr.exe"
+  register: sql_install_result
+  failed_when: >
+    sql_install_result.rc != 0 and
+    "One or more affected files have operations pending" not in sql_install_result.stdout
+  changed_when: >
+    sql_install_result.rc == 0 or
+    "One or more affected files have operations pending" in sql_install_result.stdout
+
+- name: Reboot if SQL Server installation requires it
+  ansible.windows.win_reboot:
+    reboot_timeout: 600
+  when:
+    - sql_install_result is defined
+    - sql_install_result.stdout is defined
+    - "'One or more affected files have operations pending' in sql_install_result.stdout"
+
+- name: Unmount SQL ISO
+  community.windows.win_disk_image:
+    image_path: "{{ ludus_scorch_sql_temp_dir }}\\{{ ludus_scorch_sql_iso_name }}"
+    state: absent
+
+# Install SSMS if requested
+- name: Install SSMS
+  ansible.builtin.include_tasks: install_ssms.yml
+  when: ludus_scorch_sql_install_ssms | default(true)
+
+# Final reboot after all installations
+- name: Reboot after SQL installation
+  ansible.windows.win_reboot:
+    reboot_timeout: 600
+  when: sql_install_result.changed | default(false)
+
+# Cleanup
+- name: Remove SQL ISO from Windows host
+  ansible.windows.win_file:
+    path: "{{ ludus_scorch_sql_temp_dir }}\\{{ ludus_scorch_sql_iso_name }}"
+    state: absent

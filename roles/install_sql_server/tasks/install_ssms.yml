@@ -1,0 +1,32 @@
+---
+# Install SQL Server Management Studio (SSMS)
+
+- name: Check if SSMS is installed
+  ansible.windows.win_stat:
+    path: "C:\\Program Files (x86)\\Microsoft SQL Server Management Studio 20\\Common7\\IDE\\Ssms.exe"
+  register: ssms_installed
+
+- name: Download SSMS installer
+  ansible.windows.win_get_url:
+    url: "{{ ludus_scorch_ssms_url }}"
+    dest: "{{ ludus_scorch_sql_temp_dir }}\\SSMS-Setup-ENU.exe"
+  when: not ssms_installed.stat.exists
+
+- name: Install SSMS (this will take a while)
+  ansible.windows.win_shell: |
+    {{ ludus_scorch_sql_temp_dir }}\SSMS-Setup-ENU.exe /Quiet
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+  args:
+    creates: "C:\\Program Files (x86)\\Microsoft SQL Server Management Studio 20\\Common7\\IDE\\Ssms.exe"
+  when: not ssms_installed.stat.exists
+  register: ssms_install_result
+
+- name: Remove SSMS installer
+  ansible.windows.win_file:
+    path: "{{ ludus_scorch_sql_temp_dir }}\\SSMS-Setup-ENU.exe"
+    state: absent
