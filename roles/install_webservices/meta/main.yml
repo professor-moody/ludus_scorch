@@ -16,5 +16,4 @@ galaxy_info:
     - webapi
     - iis
 
-dependencies:
-  - role: prereqs
+dependencies: []
