@@ -44,6 +44,36 @@
   register: dotnet6_check
   changed_when: false
 
+# IIS must be installed BEFORE .NET 6 Hosting Bundle for ASP.NET Core module registration
+- name: Install IIS with required features
+  ansible.windows.win_feature:
+    name:
+      - Web-Server
+      - Web-WebServer
+      - Web-Common-Http
+      - Web-Default-Doc
+      - Web-Dir-Browsing
+      - Web-Http-Errors
+      - Web-Static-Content
+      - Web-Health
+      - Web-Http-Logging
+      - Web-Performance
+      - Web-Stat-Compression
+      - Web-Security
+      - Web-Filtering
+      - Web-Windows-Auth
+      - Web-App-Dev
+      - Web-Net-Ext45
+      - Web-Asp-Net45
+      - Web-ISAPI-Ext
+      - Web-ISAPI-Filter
+      - Web-Mgmt-Tools
+      - Web-Mgmt-Console
+      - NET-Framework-45-ASPNET
+      - NET-WCF-HTTP-Activation45
+    state: present
+  register: iis_install
+
 - name: Download .NET 6 Hosting Bundle
   ansible.windows.win_get_url:
     url: "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/6.0.36/dotnet-hosting-6.0.36-win.exe"
@@ -58,10 +88,77 @@
   when: dotnet6_check.stdout | trim == "not_installed"
   register: dotnet6_install
 
+# Microsoft OLE DB Driver for SQL Server v18 - Required for Web API Service
+- name: Check if OLE DB Driver is installed
+  ansible.windows.win_shell: |
+    $oledb = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\MSOLEDBSQL" -ErrorAction SilentlyContinue
+    if ($oledb) { Write-Output "installed" } else { Write-Output "not_installed" }
+  register: oledb_check
+  changed_when: false
+
+- name: Download Microsoft OLE DB Driver for SQL Server
+  ansible.windows.win_get_url:
+    url: "https://go.microsoft.com/fwlink/?linkid=2242656"
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\msoledbsql.msi"
+  when: oledb_check.stdout | trim == "not_installed"
+
+- name: Install Microsoft OLE DB Driver for SQL Server
+  ansible.windows.win_package:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\msoledbsql.msi"
+    arguments: /quiet /norestart IACCEPTMSOLEDBSQLLICENSETERMS=YES
+    state: present
+  when: oledb_check.stdout | trim == "not_installed"
+  register: oledb_install
+
+# IIS URL Rewrite Module - Required for Orchestration Console
+- name: Check if IIS URL Rewrite is installed
+  ansible.windows.win_shell: |
+    $urlRewrite = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\IIS Extensions\URL Rewrite" -ErrorAction SilentlyContinue
+    if ($urlRewrite) { Write-Output "installed" } else { Write-Output "not_installed" }
+  register: urlrewrite_check
+  changed_when: false
+
+- name: Download IIS URL Rewrite Module
+  ansible.windows.win_get_url:
+    url: "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi"
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\rewrite_amd64.msi"
+  when: urlrewrite_check.stdout | trim == "not_installed"
+
+- name: Install IIS URL Rewrite Module
+  ansible.windows.win_package:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\rewrite_amd64.msi"
+    arguments: /quiet /norestart
+    state: present
+  when: urlrewrite_check.stdout | trim == "not_installed"
+  register: urlrewrite_install
+
+# IIS CORS Module - Required for Web API Service
+- name: Check if IIS CORS Module is installed
+  ansible.windows.win_shell: |
+    $cors = Get-WebConfigurationProperty -pspath 'MACHINE/WEBROOT/APPHOST' -filter "system.webServer/cors" -name "." -ErrorAction SilentlyContinue
+    if ($cors) { Write-Output "installed" } else { Write-Output "not_installed" }
+  register: cors_check
+  changed_when: false
+  ignore_errors: true
+
+- name: Download IIS CORS Module
+  ansible.windows.win_get_url:
+    url: "https://download.microsoft.com/download/A/D/3/AD3D89DA-BEEF-4F25-9776-3AAB624AB60E/iiscors_amd64.msi"
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\iiscors_amd64.msi"
+  when: cors_check.stdout | default('not_installed') | trim == "not_installed"
+
+- name: Install IIS CORS Module
+  ansible.windows.win_package:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\iiscors_amd64.msi"
+    arguments: /quiet /norestart
+    state: present
+  when: cors_check.stdout | default('not_installed') | trim == "not_installed"
+  register: cors_install
+
 - name: Reboot if prerequisites were installed
   ansible.windows.win_reboot:
     reboot_timeout: 600
-  when: (vcredist_install.changed | default(false)) or (dotnet6_install.changed | default(false))
+  when: (vcredist_install.changed | default(false)) or (iis_install.changed | default(false)) or (dotnet6_install.changed | default(false)) or (oledb_install.changed | default(false)) or (urlrewrite_install.changed | default(false)) or (cors_install.changed | default(false))
 
 - name: Check if SCORCH Web Services are already installed
   ansible.windows.win_shell: |

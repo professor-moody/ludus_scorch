@@ -56,10 +56,32 @@
   when: dotnet6_check.stdout | trim == "not_installed"
   register: dotnet6_install
 
+# Microsoft OLE DB Driver for SQL Server v18 - Required for Runbook Server
+- name: Check if OLE DB Driver is installed
+  ansible.windows.win_shell: |
+    $oledb = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\MSOLEDBSQL" -ErrorAction SilentlyContinue
+    if ($oledb) { Write-Output "installed" } else { Write-Output "not_installed" }
+  register: oledb_check
+  changed_when: false
+
+- name: Download Microsoft OLE DB Driver for SQL Server
+  ansible.windows.win_get_url:
+    url: "https://go.microsoft.com/fwlink/?linkid=2242656"
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\msoledbsql.msi"
+  when: oledb_check.stdout | trim == "not_installed"
+
+- name: Install Microsoft OLE DB Driver for SQL Server
+  ansible.windows.win_package:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\msoledbsql.msi"
+    arguments: /quiet /norestart IACCEPTMSOLEDBSQLLICENSETERMS=YES
+    state: present
+  when: oledb_check.stdout | trim == "not_installed"
+  register: oledb_install
+
 - name: Reboot if prerequisites were installed
   ansible.windows.win_reboot:
     reboot_timeout: 600
-  when: (vcredist_install.changed | default(false)) or (dotnet6_install.changed | default(false))
+  when: (vcredist_install.changed | default(false)) or (dotnet6_install.changed | default(false)) or (oledb_install.changed | default(false))
 
 - name: Check if SCORCH Runbook Server is already installed
   ansible.windows.win_service_info:
