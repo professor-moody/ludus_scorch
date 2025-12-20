@@ -41,3 +41,7 @@ ludus_scorch_error_reporting: "never"
 # Security testing options
 ludus_scorch_enable_anonymous_access: false
 ludus_scorch_disable_ntlm_channel_binding: true
+
+# Domain admin credentials for scheduled task (used to run installer in interactive session)
+ludus_scorch_domain_admin: "domainadmin"
+ludus_scorch_domain_admin_password: "password"

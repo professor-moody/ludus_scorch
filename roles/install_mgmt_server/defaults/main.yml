@@ -41,3 +41,8 @@ ludus_scorch_error_reporting: "never"
 
 # Remote Runbook Designer access
 ludus_scorch_enable_remote_designer: true
+
+# Domain admin credentials for scheduled task (used to run installer in interactive session)
+# These should be set in role_vars in distributed.yml
+ludus_scorch_domain_admin: "domainadmin"
+ludus_scorch_domain_admin_password: "password"

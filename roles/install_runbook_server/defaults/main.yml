@@ -28,3 +28,7 @@ ludus_scorch_send_telemetry: false
 
 # Error reporting
 ludus_scorch_error_reporting: "never"
+
+# Domain admin credentials for scheduled task (used to run installer in interactive session)
+ludus_scorch_domain_admin: "domainadmin"
+ludus_scorch_domain_admin_password: "password"

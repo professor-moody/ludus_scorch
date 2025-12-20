@@ -118,6 +118,9 @@ ludus:
       ludus_scorch_db_create_new: true
       ludus_scorch_db_use_windows_auth: true
       ludus_scorch_db_trust_cert: true
+      # Domain admin credentials for scheduled task
+      ludus_scorch_domain_admin: "domainadmin"
+      ludus_scorch_domain_admin_password: "password"
       # Group
       ludus_scorch_users_group: "OrchestratorUsers"
       ludus_scorch_enable_remote_designer: true
@@ -154,6 +157,9 @@ ludus:
       ludus_scorch_db_name: "Orchestrator"
       ludus_scorch_db_use_windows_auth: true
       ludus_scorch_db_trust_cert: true
+      # Domain admin credentials for scheduled task
+      ludus_scorch_domain_admin: "domainadmin"
+      ludus_scorch_domain_admin_password: "password"
 
   # =============================================================================
   # WEB SERVICES SERVER
@@ -199,6 +205,9 @@ ludus:
       ludus_scorch_create_default_vars: true
       # Create sample runbooks
       ludus_scorch_create_default_runbooks: true
+      # Domain admin credentials for scheduled task
+      ludus_scorch_domain_admin: "domainadmin"
+      ludus_scorch_domain_admin_password: "password"
 
   # =============================================================================
   # WORKSTATION

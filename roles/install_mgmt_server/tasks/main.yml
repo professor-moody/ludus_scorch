@@ -202,8 +202,8 @@
         arguments: '-ExecutionPolicy Bypass -File "{{ ludus_scorch_temp_dir | default(''C:\\ludus_scorch_temp'') }}\Install-SCORCH.ps1"'
     triggers:
       - type: registration
-    username: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
-    password: '{{ defaults.ad_domain_admin_password }}'
+    username: '{{ ludus_domain_fqdn }}\{{ ludus_scorch_domain_admin }}'
+    password: '{{ ludus_scorch_domain_admin_password }}'
     logon_type: interactive_token
     run_level: highest
     state: present
