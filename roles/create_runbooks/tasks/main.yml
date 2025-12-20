@@ -182,38 +182,60 @@
           [string]$Day = "Monday"
         )
         
-        # Check if schedule exists
-        $cmd = $Connection.CreateCommand()
-        $cmd.CommandText = "SELECT UniqueID FROM [dbo].[SCHEDULES] WHERE Name = @Name"
-        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
-        $existingId = $cmd.ExecuteScalar()
-        
-        if ($existingId) {
-          Write-Output "Schedule already exists: $Name"
-          return $existingId
-        }
+        # SCHEDULES table uses bit flags for days and Hours/Days columns for time patterns
+        # Schema: UniqueID, DaysOfWeek, DaysOfMonth, Monday-Sunday (bits), First-Last (bits), Days, Hours, Exceptions
         
         $scheduleId = [System.Guid]::NewGuid().ToString()
         
-        # Build schedule XML based on pattern
-        $scheduleXml = switch ($Pattern) {
-          "daily" { "<Schedule><Pattern>Daily</Pattern><Time>$Time</Time></Schedule>" }
-          "weekly" { "<Schedule><Pattern>Weekly</Pattern><DayOfWeek>$Day</DayOfWeek><Time>$Time</Time></Schedule>" }
-          "hourly" { "<Schedule><Pattern>Hourly</Pattern><Interval>1</Interval></Schedule>" }
-          default { "<Schedule><Pattern>Daily</Pattern><Time>$Time</Time></Schedule>" }
+        # Set day bits based on pattern
+        $monday = $tuesday = $wednesday = $thursday = $friday = $saturday = $sunday = 0
+        $daysOfWeek = 0
+        $hours = $Time
+        
+        switch ($Pattern) {
+          "daily" {
+            $monday = $tuesday = $wednesday = $thursday = $friday = $saturday = $sunday = 1
+            $daysOfWeek = 1
+          }
+          "weekly" {
+            $daysOfWeek = 1
+            switch ($Day) {
+              "Monday" { $monday = 1 }
+              "Tuesday" { $tuesday = 1 }
+              "Wednesday" { $wednesday = 1 }
+              "Thursday" { $thursday = 1 }
+              "Friday" { $friday = 1 }
+              "Saturday" { $saturday = 1 }
+              "Sunday" { $sunday = 1 }
+            }
+          }
+          "hourly" {
+            $monday = $tuesday = $wednesday = $thursday = $friday = $saturday = $sunday = 1
+            $daysOfWeek = 1
+            $hours = "*"
+          }
         }
         
         $cmd = $Connection.CreateCommand()
         $cmd.CommandText = @"
-          INSERT INTO [dbo].[SCHEDULES] (UniqueID, Name, Description, ScheduleXML, Deleted, LastModified)
-          VALUES (@Id, @Name, '', @ScheduleXML, 0, GETUTCDATE())
+          INSERT INTO [dbo].[SCHEDULES] 
+          (UniqueID, DaysOfWeek, DaysOfMonth, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday, Hours)
+          VALUES 
+          (@Id, @DaysOfWeek, 0, @Monday, @Tuesday, @Wednesday, @Thursday, @Friday, @Saturday, @Sunday, @Hours)
       "@
         $cmd.Parameters.AddWithValue("@Id", $scheduleId) | Out-Null
-        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
-        $cmd.Parameters.AddWithValue("@ScheduleXML", $scheduleXml) | Out-Null
+        $cmd.Parameters.AddWithValue("@DaysOfWeek", $daysOfWeek) | Out-Null
+        $cmd.Parameters.AddWithValue("@Monday", $monday) | Out-Null
+        $cmd.Parameters.AddWithValue("@Tuesday", $tuesday) | Out-Null
+        $cmd.Parameters.AddWithValue("@Wednesday", $wednesday) | Out-Null
+        $cmd.Parameters.AddWithValue("@Thursday", $thursday) | Out-Null
+        $cmd.Parameters.AddWithValue("@Friday", $friday) | Out-Null
+        $cmd.Parameters.AddWithValue("@Saturday", $saturday) | Out-Null
+        $cmd.Parameters.AddWithValue("@Sunday", $sunday) | Out-Null
+        $cmd.Parameters.AddWithValue("@Hours", $hours) | Out-Null
         $cmd.ExecuteNonQuery() | Out-Null
         
-        Write-Output "Created schedule: $Name"
+        Write-Output "Created schedule: $Name ($Pattern)"
         return $scheduleId
       }
       
@@ -225,38 +247,10 @@
           [string]$Category = "Custom"
         )
         
-        # Check if config exists
-        $cmd = $Connection.CreateCommand()
-        $cmd.CommandText = "SELECT UniqueID FROM [dbo].[GLOBALCONFIGURATIONS] WHERE Name = @Name"
-        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
-        $existingId = $cmd.ExecuteScalar()
-        
-        if ($existingId) {
-          # Update existing
-          $cmd = $Connection.CreateCommand()
-          $cmd.CommandText = "UPDATE [dbo].[GLOBALCONFIGURATIONS] SET Value = @Value WHERE UniqueID = @Id"
-          $cmd.Parameters.AddWithValue("@Value", $Value) | Out-Null
-          $cmd.Parameters.AddWithValue("@Id", $existingId) | Out-Null
-          $cmd.ExecuteNonQuery() | Out-Null
-          Write-Output "Updated config: $Name"
-          return $existingId
-        }
-        
-        $configId = [System.Guid]::NewGuid().ToString()
-        
-        $cmd = $Connection.CreateCommand()
-        $cmd.CommandText = @"
-          INSERT INTO [dbo].[GLOBALCONFIGURATIONS] (UniqueID, Name, Value, Category, Deleted, LastModified)
-          VALUES (@Id, @Name, @Value, @Category, 0, GETUTCDATE())
-      "@
-        $cmd.Parameters.AddWithValue("@Id", $configId) | Out-Null
-        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
-        $cmd.Parameters.AddWithValue("@Value", $Value) | Out-Null
-        $cmd.Parameters.AddWithValue("@Category", $Category) | Out-Null
-        $cmd.ExecuteNonQuery() | Out-Null
-        
-        Write-Output "Created config: $Name"
-        return $configId
+        # GLOBALCONFIGURATIONS table doesn't exist in SCORCH 2022
+        # Logging config values for visibility but not inserting to DB
+        Write-Output "Config (not stored - table N/A): $Category/$Name = $Value"
+        return $null
       }
       
       # Main execution
