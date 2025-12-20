@@ -14,6 +14,10 @@ ludus_scorch_dotnet6_hosting_url: "https://builds.dotnet.microsoft.com/dotnet/as
 ludus_scorch_install_vcredist: true
 ludus_scorch_vcredist_url: "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 
+# Microsoft OLE DB Driver for SQL Server v18 (REQUIRED - v19 does NOT work with SCORCH 2022)
+ludus_scorch_install_msoledbsql: true
+ludus_scorch_msoledbsql_url: "https://go.microsoft.com/fwlink/?linkid=2119554"
+
 # IIS Features
 ludus_scorch_install_iis: true
 ludus_scorch_iis_features:

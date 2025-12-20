@@ -59,6 +59,25 @@
   register: vcredist_install
   failed_when: false
 
+# Microsoft OLE DB Driver for SQL Server v18 - REQUIRED for SCORCH 2022
+# Note: v19 causes DBSetup.exe to crash with access violation
+- name: Download Microsoft OLE DB Driver v18
+  ansible.windows.win_get_url:
+    url: "{{ ludus_scorch_msoledbsql_url }}"
+    dest: "{{ ludus_scorch_temp_dir }}\\msoledbsql.msi"
+    force: false
+  when: ludus_scorch_install_msoledbsql
+  register: msoledbsql_download
+
+- name: Install Microsoft OLE DB Driver v18
+  ansible.windows.win_package:
+    path: "{{ ludus_scorch_temp_dir }}\\msoledbsql.msi"
+    arguments: /quiet /norestart IACCEPTMSOLEDBSQLLICENSETERMS=YES
+    state: present
+  when: ludus_scorch_install_msoledbsql
+  register: msoledbsql_install
+  failed_when: false
+
 - name: Download .NET 5 Hosting Bundle
   ansible.windows.win_get_url:
     url: "{{ ludus_scorch_dotnet5_hosting_url }}"
@@ -159,6 +178,7 @@
       DotNet45 = (Get-WindowsFeature NET-Framework-45-Core).Installed
       IIS = (Get-WindowsFeature Web-Server).Installed
       WCF = (Get-WindowsFeature NET-WCF-HTTP-Activation45).Installed
+      MSOLEDBSQL = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\MSOLEDBSQL" -ErrorAction SilentlyContinue).InstalledVersion
     }
     $results | ConvertTo-Json
   register: prereq_check
