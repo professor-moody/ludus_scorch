@@ -78,7 +78,7 @@
 
 - name: Download .NET 5 Hosting Bundle
   ansible.windows.win_get_url:
-    url: "https://download.visualstudio.microsoft.com/download/pr/5cc93fce-45cc-4cfe-a206-be05c02814e3/0e9568e61d79ac7fa8c09d8937f9eb54/dotnet-hosting-5.0.17-win.exe"
+    url: "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/5.0.17/dotnet-hosting-5.0.17-win.exe"
     dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\dotnet-hosting-5.0.exe"
   when: dotnet5_check.stdout | trim == "not_installed"
 
