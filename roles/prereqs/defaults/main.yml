@@ -1,0 +1,64 @@
+---
+# SCORCH Prerequisites Configuration
+
+# .NET Framework versions
+ludus_scorch_install_dotnet35: true
+ludus_scorch_install_dotnet472: true
+
+# .NET Core/Hosting Bundle for Web API (SCORCH 2022+)
+ludus_scorch_install_dotnet_hosting: true
+ludus_scorch_dotnet_hosting_version: "8.0.11"
+ludus_scorch_dotnet_hosting_url: "https://download.visualstudio.microsoft.com/download/pr/8dc79cfe-4de8-4f37-8b16-53de7f27e504/5cdd4f6fcbbe145cd8e7fb693a5f8c27/dotnet-hosting-8.0.11-win.exe"
+
+# Visual C++ Redistributable
+ludus_scorch_install_vcredist: true
+ludus_scorch_vcredist_url: "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+
+# IIS Features
+ludus_scorch_install_iis: true
+ludus_scorch_iis_features:
+  - Web-Server
+  - Web-WebServer
+  - Web-Common-Http
+  - Web-Default-Doc
+  - Web-Dir-Browsing
+  - Web-Http-Errors
+  - Web-Static-Content
+  - Web-Health
+  - Web-Http-Logging
+  - Web-Log-Libraries
+  - Web-Request-Monitor
+  - Web-Security
+  - Web-Filtering
+  - Web-Windows-Auth
+  - Web-App-Dev
+  - Web-Net-Ext45
+  - Web-Asp-Net45
+  - Web-ISAPI-Ext
+  - Web-ISAPI-Filter
+  - Web-Mgmt-Tools
+  - Web-Mgmt-Console
+  - Web-Mgmt-Compat
+  - Web-Metabase
+  - Web-Scripting-Tools
+  - NET-WCF-HTTP-Activation45
+  - NET-WCF-TCP-Activation45
+  - NET-WCF-Pipe-Activation45
+
+# IIS Modules (downloaded separately)
+ludus_scorch_install_iis_modules: true
+ludus_scorch_urlrewrite_url: "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi"
+ludus_scorch_cors_url: "https://download.microsoft.com/download/3/E/7/3E7F7F3A-DB77-4F2D-86BA-4E0530B7FE52/iiscors_amd64.msi"
+
+# Temp directory for installers
+ludus_scorch_temp_dir: "C:\\ludus_scorch_temp"
+
+# Firewall ports to open
+ludus_scorch_firewall_ports:
+  - { name: "SCORCH Web API", port: 81, protocol: "tcp" }
+  - { name: "SCORCH Console", port: 82, protocol: "tcp" }
+  - { name: "SQL Server", port: 1433, protocol: "tcp" }
+  - { name: "WMI", port: 135, protocol: "tcp" }
+  - { name: "SMB", port: 445, protocol: "tcp" }
+  - { name: "WinRM HTTP", port: 5985, protocol: "tcp" }
+  - { name: "WinRM HTTPS", port: 5986, protocol: "tcp" }

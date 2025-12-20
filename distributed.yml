@@ -105,6 +105,7 @@ ludus:
       role: member
     roles:
       - professor_moody.ludus_scorch.disable_firewall
+      - professor_moody.ludus_scorch.prereqs
       - professor_moody.ludus_scorch.install_mgmt_server
     role_vars:
       # SCORCH installation (auto-downloads from Microsoft!)
@@ -134,11 +135,14 @@ ludus:
     cpus: 4
     windows:
       sysprep: true
+      autologon_user: domainadmin
+      autologon_password: password
     domain:
       fqdn: scorch.ludus.domain
       role: member
     roles:
       - professor_moody.ludus_scorch.disable_firewall
+      - professor_moody.ludus_scorch.prereqs
       - professor_moody.ludus_scorch.install_runbook_server
     role_vars:
       # SCORCH installation (auto-downloads from Microsoft!)
@@ -164,11 +168,14 @@ ludus:
     cpus: 4
     windows:
       sysprep: true
+      autologon_user: domainadmin
+      autologon_password: password
     domain:
       fqdn: scorch.ludus.domain
       role: member
     roles:
       - professor_moody.ludus_scorch.disable_firewall
+      - professor_moody.ludus_scorch.prereqs
       - professor_moody.ludus_scorch.install_webservices
       - professor_moody.ludus_scorch.create_variables
       - professor_moody.ludus_scorch.create_runbooks

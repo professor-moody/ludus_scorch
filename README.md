@@ -75,27 +75,7 @@ This is a 180-day evaluation that requires no product key.
 - `win2022-server-x64-template`
 - `win11-22h2-x64-enterprise-template` (optional, for workstation)
 
-## Deployment Architectures
-
-### Single Server (Quick Lab)
-
-```
-┌─────────────┐      ┌─────────────────────────────────┐
-│    DC01     │      │           SCORCH                │
-│  Domain     │◄────►│  • SQL Server                   │
-│  Controller │      │  • Management Server            │
-│             │      │  • Runbook Server               │
-└─────────────┘      │  • Web API (:81)                │
-                     │  • Console (:82)                │
-                     │  • Runbook Designer             │
-                     └─────────────────────────────────┘
-```
-
-**VMs: 2** | **RAM: 12GB** | **Time: ~60 min**
-
-Use: `ludus range config set -f single-server.yml`
-
-### Distributed (Production-Like)
+## Deployment Architecture
 
 ```
 ┌─────────────┐      ┌─────────────┐      ┌─────────────┐

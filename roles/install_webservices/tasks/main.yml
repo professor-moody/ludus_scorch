@@ -13,177 +13,6 @@
     path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}"
     state: directory
 
-# =============================================================================
-# PREREQUISITES - SCORCH 2022 requires VC++, IIS, .NET 5/6 Hosting Bundles
-# IMPORTANT: IIS must be installed BEFORE .NET Hosting Bundles for module registration
-# =============================================================================
-- name: Check if VC++ Redistributable is installed
-  ansible.windows.win_shell: |
-    $vcRedist = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64" -ErrorAction SilentlyContinue
-    if ($vcRedist -and $vcRedist.Version -ge "14.34") { Write-Output "installed" } else { Write-Output "not_installed" }
-  register: vcredist_check
-  changed_when: false
-
-- name: Download Visual C++ Redistributable 2015-2022
-  ansible.windows.win_get_url:
-    url: "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\vc_redist.x64.exe"
-  when: vcredist_check.stdout | trim == "not_installed"
-
-- name: Install Visual C++ Redistributable 2015-2022
-  ansible.windows.win_package:
-    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\vc_redist.x64.exe"
-    arguments: /install /quiet /norestart
-    state: present
-  when: vcredist_check.stdout | trim == "not_installed"
-  register: vcredist_install
-
-# IIS MUST be installed BEFORE .NET Hosting Bundles for ASP.NET Core module registration
-- name: Install IIS with required features
-  ansible.windows.win_feature:
-    name:
-      - Web-Server
-      - Web-WebServer
-      - Web-Common-Http
-      - Web-Default-Doc
-      - Web-Dir-Browsing
-      - Web-Http-Errors
-      - Web-Static-Content
-      - Web-Health
-      - Web-Http-Logging
-      - Web-Performance
-      - Web-Stat-Compression
-      - Web-Security
-      - Web-Filtering
-      - Web-Windows-Auth
-      - Web-App-Dev
-      - Web-Net-Ext45
-      - Web-Asp-Net45
-      - Web-ISAPI-Ext
-      - Web-ISAPI-Filter
-      - Web-Mgmt-Tools
-      - Web-Mgmt-Console
-      - NET-Framework-45-ASPNET
-      - NET-WCF-HTTP-Activation45
-    state: present
-  register: iis_install
-
-# .NET 5 Hosting Bundle - Required by SCORCH 2022 Web API
-- name: Check if .NET 5 Hosting Bundle is installed
-  ansible.windows.win_shell: |
-    $dotnet5 = Get-ItemProperty "HKLM:\SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.AspNetCore.App" -ErrorAction SilentlyContinue
-    if ($dotnet5 -and $dotnet5.PSObject.Properties.Name -match "5\.") { Write-Output "installed" } else { Write-Output "not_installed" }
-  register: dotnet5_check
-  changed_when: false
-
-- name: Download .NET 5 Hosting Bundle
-  ansible.windows.win_get_url:
-    url: "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/5.0.17/dotnet-hosting-5.0.17-win.exe"
-    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\dotnet-hosting-5.0.exe"
-  when: dotnet5_check.stdout | trim == "not_installed"
-
-- name: Install .NET 5 Hosting Bundle
-  ansible.windows.win_package:
-    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\dotnet-hosting-5.0.exe"
-    arguments: /install /quiet /norestart
-    state: present
-  when: dotnet5_check.stdout | trim == "not_installed"
-  register: dotnet5_install
-
-# .NET 6 Hosting Bundle - Required by SCORCH 2022 Web API
-- name: Check if .NET 6 Hosting Bundle is installed
-  ansible.windows.win_shell: |
-    $dotnet6 = Get-ItemProperty "HKLM:\SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.AspNetCore.App" -ErrorAction SilentlyContinue
-    if ($dotnet6 -and $dotnet6.PSObject.Properties.Name -match "6\.") { Write-Output "installed" } else { Write-Output "not_installed" }
-  register: dotnet6_check
-  changed_when: false
-
-- name: Download .NET 6 Hosting Bundle
-  ansible.windows.win_get_url:
-    url: "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/6.0.36/dotnet-hosting-6.0.36-win.exe"
-    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\dotnet-hosting-6.0.exe"
-  when: dotnet6_check.stdout | trim == "not_installed"
-
-- name: Install .NET 6 Hosting Bundle
-  ansible.windows.win_package:
-    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\dotnet-hosting-6.0.exe"
-    arguments: /install /quiet /norestart
-    state: present
-  when: dotnet6_check.stdout | trim == "not_installed"
-  register: dotnet6_install
-
-# Microsoft OLE DB Driver for SQL Server v18 - Required for Web API Service
-- name: Check if OLE DB Driver is installed
-  ansible.windows.win_shell: |
-    $oledb = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\MSOLEDBSQL" -ErrorAction SilentlyContinue
-    if ($oledb) { Write-Output "installed" } else { Write-Output "not_installed" }
-  register: oledb_check
-  changed_when: false
-
-- name: Download Microsoft OLE DB Driver for SQL Server
-  ansible.windows.win_get_url:
-    url: "https://go.microsoft.com/fwlink/?linkid=2242656"
-    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\msoledbsql.msi"
-  when: oledb_check.stdout | trim == "not_installed"
-
-- name: Install Microsoft OLE DB Driver for SQL Server
-  ansible.windows.win_package:
-    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\msoledbsql.msi"
-    arguments: /quiet /norestart IACCEPTMSOLEDBSQLLICENSETERMS=YES
-    state: present
-  when: oledb_check.stdout | trim == "not_installed"
-  register: oledb_install
-
-# IIS URL Rewrite Module - Required for Orchestration Console
-- name: Check if IIS URL Rewrite is installed
-  ansible.windows.win_shell: |
-    $urlRewrite = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\IIS Extensions\URL Rewrite" -ErrorAction SilentlyContinue
-    if ($urlRewrite) { Write-Output "installed" } else { Write-Output "not_installed" }
-  register: urlrewrite_check
-  changed_when: false
-
-- name: Download IIS URL Rewrite Module
-  ansible.windows.win_get_url:
-    url: "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi"
-    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\rewrite_amd64.msi"
-  when: urlrewrite_check.stdout | trim == "not_installed"
-
-- name: Install IIS URL Rewrite Module
-  ansible.windows.win_package:
-    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\rewrite_amd64.msi"
-    arguments: /quiet /norestart
-    state: present
-  when: urlrewrite_check.stdout | trim == "not_installed"
-  register: urlrewrite_install
-
-# IIS CORS Module - Required for Web API Service
-- name: Check if IIS CORS Module is installed
-  ansible.windows.win_shell: |
-    $cors = Get-WebConfigurationProperty -pspath 'MACHINE/WEBROOT/APPHOST' -filter "system.webServer/cors" -name "." -ErrorAction SilentlyContinue
-    if ($cors) { Write-Output "installed" } else { Write-Output "not_installed" }
-  register: cors_check
-  changed_when: false
-  ignore_errors: true
-
-- name: Download IIS CORS Module
-  ansible.windows.win_get_url:
-    url: "https://go.microsoft.com/fwlink/?linkid=862444"
-    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\iiscors_amd64.msi"
-  when: cors_check.stdout | default('not_installed') | trim == "not_installed"
-
-- name: Install IIS CORS Module
-  ansible.windows.win_package:
-    path: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\iiscors_amd64.msi"
-    arguments: /quiet /norestart
-    state: present
-  when: cors_check.stdout | default('not_installed') | trim == "not_installed"
-  register: cors_install
-
-- name: Reboot if prerequisites were installed
-  ansible.windows.win_reboot:
-    reboot_timeout: 600
-  when: (vcredist_install.changed | default(false)) or (iis_install.changed | default(false)) or (dotnet5_install.changed | default(false)) or (dotnet6_install.changed | default(false)) or (oledb_install.changed | default(false)) or (urlrewrite_install.changed | default(false)) or (cors_install.changed | default(false))
-
 - name: Check if SCORCH Web Services are already installed
   ansible.windows.win_shell: |
     $site = Get-Website -Name "Microsoft System Center*Orchestrator*" -ErrorAction SilentlyContinue
@@ -286,90 +115,153 @@
     }
   failed_when: false
 
-- name: Install SCORCH Web API Service
-  ansible.windows.win_shell: |
-    $ErrorActionPreference = "Stop"
-    $env:SEE_MASK_NOZONECHECKS = 1
-    
-    $args = @(
-      '/Silent',
-      '/ServiceUserName:{{ ludus_scorch_web_account_full }}',
-      '/ServicePassword:{{ ludus_scorch_web_password }}',
-      '/Components:WebAPI',
-      '/DbServer:{{ ludus_scorch_db_connection }}',
-      '/DbNameExisting:{{ ludus_scorch_db_name }}',
-      '/TrustServerCertificate:{{ ludus_scorch_db_trust_cert | lower }}',
-      '/WebServicePort:{{ ludus_scorch_api_port }}',
-      '/WebConsolePublicUrl:"{{ ludus_scorch_console_url }}"',
-      '/UseMicrosoftUpdate:{% if ludus_scorch_use_microsoft_update %}1{% else %}0{% endif %}',
-      '/SendTelemetryReports:{% if ludus_scorch_send_telemetry %}1{% else %}0{% endif %}',
-      '/EnableErrorReporting:{{ ludus_scorch_error_reporting }}'
-    )
-    
-    Write-Output "Installing SCORCH Web API..."
-    
-    $process = Start-Process -FilePath "{{ ludus_scorch_setup_path }}" `
-      -ArgumentList $args `
-      -Wait -PassThru -NoNewWindow
-    
-    if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
-      Write-Output "Web API installed successfully"
-      exit 0
-    } else {
-      Write-Error "Installation failed with exit code: $($process.ExitCode)"
-      exit $process.ExitCode
-    }
-  vars:
-    ansible_become: true
-    ansible_become_method: runas
-    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
-    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
-    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
-  when: scorch_web_check.stdout | trim == "not_installed"
-  register: webapi_install
-  async: 1800
-  poll: 60
+# =============================================================================
+# SCORCH WEB SERVICES INSTALLATION - Using Scheduled Task for Interactive Session
+# =============================================================================
 
-- name: Install SCORCH Orchestration Console
-  ansible.windows.win_shell: |
-    $ErrorActionPreference = "Stop"
-    $env:SEE_MASK_NOZONECHECKS = 1
-    
-    $args = @(
-      '/Silent',
-      '/ServiceUserName:{{ ludus_scorch_web_account_full }}',
-      '/ServicePassword:{{ ludus_scorch_web_password }}',
-      '/Components:WebConsole',
-      '/WebConsolePort:{{ ludus_scorch_console_port }}',
-      '/WebServicePublicUrl:"{{ ludus_scorch_api_url }}"',
-      '/UseMicrosoftUpdate:{% if ludus_scorch_use_microsoft_update %}1{% else %}0{% endif %}',
-      '/SendTelemetryReports:{% if ludus_scorch_send_telemetry %}1{% else %}0{% endif %}',
-      '/EnableErrorReporting:{{ ludus_scorch_error_reporting }}'
-    )
-    
-    Write-Output "Installing SCORCH Orchestration Console..."
-    
-    $process = Start-Process -FilePath "{{ ludus_scorch_setup_path }}" `
-      -ArgumentList $args `
-      -Wait -PassThru -NoNewWindow
-    
-    if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
-      Write-Output "Console installed successfully"
-      exit 0
-    } else {
-      Write-Error "Installation failed with exit code: $($process.ExitCode)"
-      exit $process.ExitCode
-    }
-  vars:
-    ansible_become: true
-    ansible_become_method: runas
-    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
-    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
-    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+- name: Create temp directory
+  ansible.windows.win_file:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\ludus_scorch_temp') }}"
+    state: directory
   when: scorch_web_check.stdout | trim == "not_installed"
-  register: console_install
-  async: 1800
-  poll: 60
+
+- name: Create SCORCH Web Services install script
+  ansible.windows.win_copy:
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\ludus_scorch_temp') }}\\Install-SCORCH-Web.ps1"
+    content: |
+      $ErrorActionPreference = "Stop"
+      $logFile = "{{ ludus_scorch_temp_dir | default('C:\\ludus_scorch_temp') }}\scorch_web_install.log"
+      
+      Start-Transcript -Path $logFile -Append
+      
+      $env:SEE_MASK_NOZONECHECKS = 1
+      
+      $setupPath = "{{ ludus_scorch_setup_path }}"
+      $exitCodeFile = "{{ ludus_scorch_temp_dir | default('C:\\ludus_scorch_temp') }}\scorch_web_exit_code.txt"
+      
+      # Install Web API first
+      Write-Output "Installing SCORCH Web API..."
+      $apiArgs = @(
+        '/Silent',
+        '/ServiceUserName:{{ ludus_scorch_web_account_full }}',
+        '/ServicePassword:{{ ludus_scorch_web_password }}',
+        '/Components:WebAPI',
+        '/DbServer:{{ ludus_scorch_db_connection }}',
+        '/DbNameExisting:{{ ludus_scorch_db_name }}',
+        '/TrustServerCertificate:{{ ludus_scorch_db_trust_cert | lower }}',
+        '/WebServicePort:{{ ludus_scorch_api_port }}',
+        '/WebConsolePublicUrl:"{{ ludus_scorch_console_url }}"',
+        '/UseMicrosoftUpdate:{% if ludus_scorch_use_microsoft_update %}1{% else %}0{% endif %}',
+        '/SendTelemetryReports:{% if ludus_scorch_send_telemetry %}1{% else %}0{% endif %}',
+        '/EnableErrorReporting:{{ ludus_scorch_error_reporting }}'
+      )
+      
+      Write-Output "Web API Arguments: $($apiArgs -join ' ')"
+      
+      try {
+        $process = Start-Process -FilePath $setupPath -ArgumentList $apiArgs -Wait -PassThru -NoNewWindow
+        $apiExitCode = $process.ExitCode
+        Write-Output "Web API installation completed with exit code: $apiExitCode"
+        
+        if ($apiExitCode -ne 0 -and $apiExitCode -ne 3010) {
+          Write-Error "Web API installation failed"
+          $apiExitCode | Out-File -FilePath $exitCodeFile -Force
+          Stop-Transcript
+          exit $apiExitCode
+        }
+      } catch {
+        Write-Error "Web API installation failed: $_"
+        999 | Out-File -FilePath $exitCodeFile -Force
+        Stop-Transcript
+        exit 999
+      }
+      
+      # Install Orchestration Console
+      Write-Output "Installing SCORCH Orchestration Console..."
+      $consoleArgs = @(
+        '/Silent',
+        '/ServiceUserName:{{ ludus_scorch_web_account_full }}',
+        '/ServicePassword:{{ ludus_scorch_web_password }}',
+        '/Components:WebConsole',
+        '/WebConsolePort:{{ ludus_scorch_console_port }}',
+        '/WebServicePublicUrl:"{{ ludus_scorch_api_url }}"',
+        '/UseMicrosoftUpdate:{% if ludus_scorch_use_microsoft_update %}1{% else %}0{% endif %}',
+        '/SendTelemetryReports:{% if ludus_scorch_send_telemetry %}1{% else %}0{% endif %}',
+        '/EnableErrorReporting:{{ ludus_scorch_error_reporting }}'
+      )
+      
+      Write-Output "Console Arguments: $($consoleArgs -join ' ')"
+      
+      try {
+        $process = Start-Process -FilePath $setupPath -ArgumentList $consoleArgs -Wait -PassThru -NoNewWindow
+        $consoleExitCode = $process.ExitCode
+        Write-Output "Console installation completed with exit code: $consoleExitCode"
+        $consoleExitCode | Out-File -FilePath $exitCodeFile -Force
+        Stop-Transcript
+        exit $consoleExitCode
+      } catch {
+        Write-Error "Console installation failed: $_"
+        999 | Out-File -FilePath $exitCodeFile -Force
+        Stop-Transcript
+        exit 999
+      }
+  when: scorch_web_check.stdout | trim == "not_installed"
+
+- name: Remove any existing SCORCH Web install scheduled task
+  community.windows.win_scheduled_task:
+    name: "SCORCH_Web_Install"
+    state: absent
+  when: scorch_web_check.stdout | trim == "not_installed"
+
+- name: Create scheduled task for SCORCH Web Services installation
+  community.windows.win_scheduled_task:
+    name: "SCORCH_Web_Install"
+    description: "Install SCORCH Web Services in interactive session"
+    actions:
+      - path: powershell.exe
+        arguments: '-ExecutionPolicy Bypass -File "{{ ludus_scorch_temp_dir | default(''C:\\ludus_scorch_temp'') }}\Install-SCORCH-Web.ps1"'
+    triggers:
+      - type: registration
+    username: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    password: '{{ defaults.ad_domain_admin_password }}'
+    logon_type: interactive_token
+    run_level: highest
+    state: present
+    enabled: true
+  when: scorch_web_check.stdout | trim == "not_installed"
+  register: sched_task_created
+
+- name: Run the SCORCH Web install scheduled task
+  ansible.windows.win_shell: |
+    Start-ScheduledTask -TaskName "SCORCH_Web_Install"
+  when: 
+    - scorch_web_check.stdout | trim == "not_installed"
+    - sched_task_created is changed
+
+- name: Wait for SCORCH Web installation to complete
+  ansible.windows.win_wait_for:
+    path: "{{ ludus_scorch_temp_dir | default('C:\\ludus_scorch_temp') }}\\scorch_web_exit_code.txt"
+    timeout: 3600
+  when: scorch_web_check.stdout | trim == "not_installed"
+
+- name: Get installation exit code
+  ansible.windows.win_shell: |
+    Get-Content "{{ ludus_scorch_temp_dir | default('C:\\ludus_scorch_temp') }}\scorch_web_exit_code.txt"
+  register: install_exit_code
+  when: scorch_web_check.stdout | trim == "not_installed"
+
+- name: Check installation result
+  ansible.builtin.fail:
+    msg: "SCORCH Web Services installation failed with exit code: {{ install_exit_code.stdout | trim }}"
+  when:
+    - scorch_web_check.stdout | trim == "not_installed"
+    - install_exit_code.stdout | trim not in ['0', '3010']
+
+- name: Remove SCORCH Web install scheduled task
+  community.windows.win_scheduled_task:
+    name: "SCORCH_Web_Install"
+    state: absent
+  when: scorch_web_check.stdout | trim == "not_installed"
 
 - name: Configure anonymous access for testing
   ansible.windows.win_shell: |
