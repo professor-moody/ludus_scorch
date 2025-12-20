@@ -29,6 +29,11 @@
     exit 1
   register: db_ready
   changed_when: false
+  become: true
+  become_method: runas
+  become_user: "{{ ludus_domain_fqdn | default('scorch.ludus.domain') }}\\{{ ludus_scorch_domain_admin }}"
+  vars:
+    ansible_become_password: "{{ ludus_scorch_domain_admin_password }}"
 
 - name: Create variable creation script
   ansible.windows.win_copy:
@@ -138,6 +143,11 @@
       -FolderPath "{{ item.folder | default('Variables') }}"
   loop: "{{ ludus_scorch_all_variables }}"
   when: ludus_scorch_all_variables | length > 0
+  become: true
+  become_method: runas
+  become_user: "{{ ludus_domain_fqdn | default('scorch.ludus.domain') }}\\{{ ludus_scorch_domain_admin }}"
+  vars:
+    ansible_become_password: "{{ ludus_scorch_domain_admin_password }}"
 
 - name: Verify variables created
   ansible.windows.win_shell: |
@@ -164,6 +174,11 @@
     $conn.Close()
   register: var_count
   changed_when: false
+  become: true
+  become_method: runas
+  become_user: "{{ ludus_domain_fqdn | default('scorch.ludus.domain') }}\\{{ ludus_scorch_domain_admin }}"
+  vars:
+    ansible_become_password: "{{ ludus_scorch_domain_admin_password }}"
 
 - name: Display variable creation summary
   ansible.builtin.debug:

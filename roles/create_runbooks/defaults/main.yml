@@ -135,3 +135,10 @@ ludus_scorch_schedules:
     time: "02:00"
   - name: "Hourly"
     pattern: "hourly"
+
+# Domain admin credentials for SQL access (to bypass double-hop)
+ludus_scorch_domain_admin: "domainadmin"
+ludus_scorch_domain_admin_password: "password"
+
+# Temp directory for scripts
+ludus_scorch_temp_dir: "C:\\ludus_scorch_temp"

@@ -24,6 +24,11 @@
     exit 1
   register: db_ready
   changed_when: false
+  become: true
+  become_method: runas
+  become_user: "{{ ludus_domain_fqdn | default('scorch.ludus.domain') }}\\{{ ludus_scorch_domain_admin }}"
+  vars:
+    ansible_become_password: "{{ ludus_scorch_domain_admin_password }}"
 
 - name: Create runbook management script
   ansible.windows.win_copy:
@@ -300,12 +305,22 @@
     $content = $content -replace '\{\{ ludus_scorch_runbook_creation_commands \}\}', $commands
     Set-Content -Path $scriptPath -Value $content
   when: ludus_scorch_create_default_runbooks
+  become: true
+  become_method: runas
+  become_user: "{{ ludus_domain_fqdn | default('scorch.ludus.domain') }}\\{{ ludus_scorch_domain_admin }}"
+  vars:
+    ansible_become_password: "{{ ludus_scorch_domain_admin_password }}"
 
 - name: Execute runbook creation script
   ansible.windows.win_shell: |
     & "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\Create-Runbooks.ps1"
   register: runbook_creation
   when: ludus_scorch_create_default_runbooks
+  become: true
+  become_method: runas
+  become_user: "{{ ludus_domain_fqdn | default('scorch.ludus.domain') }}\\{{ ludus_scorch_domain_admin }}"
+  vars:
+    ansible_become_password: "{{ ludus_scorch_domain_admin_password }}"
 
 - name: Display runbook creation results
   ansible.builtin.debug:
@@ -338,6 +353,11 @@
     $conn.Close()
   register: scorch_counts
   changed_when: false
+  become: true
+  become_method: runas
+  become_user: "{{ ludus_domain_fqdn | default('scorch.ludus.domain') }}\\{{ ludus_scorch_domain_admin }}"
+  vars:
+    ansible_become_password: "{{ ludus_scorch_domain_admin_password }}"
 
 - name: Display SCORCH object counts
   ansible.builtin.debug:
