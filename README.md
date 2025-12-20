@@ -41,8 +41,6 @@ ludus range deploy
 # Or check the status with `ludus range status`
 ```
 
-**No file uploads required!** Both SQL Server and SCORCH are automatically downloaded during deployment.
-
 ## Prerequisites
 
 ### Required Roles
