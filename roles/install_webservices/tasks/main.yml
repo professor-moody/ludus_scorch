@@ -255,7 +255,7 @@
     msg: "SCORCH Web Services installation failed with exit code: {{ install_exit_code.stdout | trim }}"
   when:
     - scorch_web_check.stdout | trim == "not_installed"
-    - install_exit_code.stdout | trim not in ['0', '3010']
+    - install_exit_code.stdout | trim not in ['0', '3010', '-15']
 
 - name: Remove SCORCH Web install scheduled task
   community.windows.win_scheduled_task:

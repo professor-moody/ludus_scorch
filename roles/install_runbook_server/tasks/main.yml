@@ -207,7 +207,7 @@
     msg: "SCORCH Runbook Server installation failed with exit code: {{ install_exit_code.stdout | trim }}"
   when:
     - scorch_rb_service.services | length == 0
-    - install_exit_code.stdout | trim not in ['0', '3010']
+    - install_exit_code.stdout | trim not in ['0', '3010', '-15']
 
 - name: Remove SCORCH RB install scheduled task
   community.windows.win_scheduled_task:
