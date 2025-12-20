@@ -46,7 +46,7 @@
 
 - name: Download .NET 6 Hosting Bundle
   ansible.windows.win_get_url:
-    url: "https://download.visualstudio.microsoft.com/download/pr/0bc22cf5-fcc4-4e41-b8fc-b17b2564fd7b/1cdce94c39985ffcfa5e37b0a9dc8c8a/dotnet-hosting-6.0.36-win.exe"
+    url: "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/6.0.36/dotnet-hosting-6.0.36-win.exe"
     dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\dotnet-hosting-6.0.exe"
   when: dotnet6_check.stdout | trim == "not_installed"
 
