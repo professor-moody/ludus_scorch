@@ -6,7 +6,7 @@ An Ansible collection that installs System Center Orchestrator (SCORCH) deployme
 
 System Center Orchestrator stores credentials for numerous enterprise systems through Integration Packs and encrypted variables. This makes it a high-value target for red team operations. This Ludus collection automates deployment of realistic SCORCH environments for security testing and tool development.
 
-For the corresponding research and tools, see the [scorch-tools](https://github.com/professor-moody/scorch-tools) repository.
+For the corresponding research and tools, see the [scorch-tools](https://github.com/professor-moody/scorch) repository.
 
 ## Roles Included
 
