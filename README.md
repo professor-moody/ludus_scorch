@@ -137,7 +137,7 @@ Use: `ludus range config set -f distributed.yml`
 
 ## Testing Your Deployment
 
-After deployment, verify with [scorch-tools](https://github.com/professor-moody/scorch):
+After deployment, verify with [scorch](https://github.com/professor-moody/scorch):
 
 ```bash
 # Security assessment (no auth required)
