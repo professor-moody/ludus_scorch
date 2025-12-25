@@ -1,45 +1,10 @@
 ---
 # Create sample runbooks in SCORCH for realistic testing
+# This role creates runbooks with proper activities and data bus variable references
 
 - name: Set database connection string
   ansible.builtin.set_fact:
     ludus_scorch_db_connection: "{{ ludus_scorch_db_server }}{% if ludus_scorch_db_instance | length > 0 %}\\{{ ludus_scorch_db_instance }}{% endif %}"
-
-- name: Build runbook creation commands
-  ansible.builtin.set_fact:
-    ludus_scorch_runbook_creation_commands: |
-      # Create folder structure
-      {% for folder in ludus_scorch_runbook_folders %}
-      Get-OrCreateFolder -Connection $conn -FolderPath "{{ folder.name }}"
-      {% for subfolder in folder.subfolders | default([]) %}
-      Get-OrCreateFolder -Connection $conn -FolderPath "{{ folder.name }}\\{{ subfolder }}"
-      {% endfor %}
-      {% endfor %}
-      
-      # Create sample runbooks
-      {% for runbook in ludus_scorch_sample_runbooks %}
-      New-Runbook -Connection $conn -Name "{{ runbook.name }}" -FolderPath "{{ runbook.folder }}" -Description "{{ runbook.description }}" -UsesCredentials ${{ runbook.uses_credentials | default(false) | lower }}
-      {% endfor %}
-      
-      # Create schedules
-      {% for schedule in ludus_scorch_schedules %}
-      New-Schedule -Connection $conn -Name "{{ schedule.name }}" -Pattern "{{ schedule.pattern }}"{% if schedule.time is defined %} -Time "{{ schedule.time }}"{% endif %}{% if schedule.day is defined %} -Day "{{ schedule.day }}"{% endif %}
-
-      {% endfor %}
-      
-      # Create global configurations (simulating Integration Pack settings)
-      New-GlobalConfiguration -Connection $conn -Name "SCOM_ManagementServer" -Value "scom-mgmt.corp.local" -Category "SCOM"
-      New-GlobalConfiguration -Connection $conn -Name "SCOM_RunAsAccount" -Value "CORP\\scom_action" -Category "SCOM"
-      New-GlobalConfiguration -Connection $conn -Name "Exchange_Server" -Value "exchange.corp.local" -Category "Exchange"
-      New-GlobalConfiguration -Connection $conn -Name "Exchange_AdminAccount" -Value "CORP\\exch_admin" -Category "Exchange"
-      New-GlobalConfiguration -Connection $conn -Name "ServiceNow_Instance" -Value "corpinc.service-now.com" -Category "ServiceNow"
-      New-GlobalConfiguration -Connection $conn -Name "ServiceNow_Username" -Value "api_orchestrator" -Category "ServiceNow"
-      New-GlobalConfiguration -Connection $conn -Name "VMware_vCenter" -Value "vcenter.corp.local" -Category "VMware"
-      New-GlobalConfiguration -Connection $conn -Name "VMware_Username" -Value "svc_orchestrator@vsphere.local" -Category "VMware"
-      New-GlobalConfiguration -Connection $conn -Name "Azure_TenantId" -Value "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Category "Azure"
-      New-GlobalConfiguration -Connection $conn -Name "Azure_SubscriptionId" -Value "12345678-abcd-ef12-3456-7890abcdef12" -Category "Azure"
-      New-GlobalConfiguration -Connection $conn -Name "AWS_Region" -Value "us-east-1" -Category "AWS"
-      New-GlobalConfiguration -Connection $conn -Name "AWS_AccountId" -Value "123456789012" -Category "AWS"
 
 - name: Wait for database connectivity
   ansible.windows.win_shell: |
@@ -47,18 +12,18 @@
     while ($retries -lt 30) {
       try {
         $conn = New-Object System.Data.SqlClient.SqlConnection
-        $conn.ConnectionString = "Server={{ ludus_scorch_db_connection }};Database={{ ludus_scorch_db_name }};Integrated Security=True;TrustServerCertificate={{ ludus_scorch_db_trust_cert }}"
+        $conn.ConnectionString = "Server={{ ludus_scorch_db_connection }};Database={{ ludus_scorch_db_name }};Integrated Security=True;TrustServerCertificate=True"
         $conn.Open()
         $conn.Close()
-        Write-Output "Connected"
+        Write-Output "Database connection successful"
         exit 0
       } catch {
-        Start-Sleep -Seconds 10
         $retries++
+        Start-Sleep -Seconds 5
       }
     }
+    Write-Error "Failed to connect to database after 30 retries"
     exit 1
-  register: db_ready
   changed_when: false
   become: true
   become_method: runas
@@ -66,19 +31,16 @@
   vars:
     ansible_become_password: "{{ ludus_scorch_domain_admin_password }}"
 
-- name: Create runbook management script
+- name: Create runbook management script with realistic activities
   ansible.windows.win_copy:
     content: |
-      # SCORCH Runbook Management Script
-      # Creates folders, runbooks, and schedules for testing
+      # SCORCH Runbook Management Script - Creates realistic runbooks with proper activities
       
       param(
         [string]$DbServer = "{{ ludus_scorch_db_connection }}",
-        [string]$DbName = "{{ ludus_scorch_db_name }}",
-        [string]$Action = "CreateAll"
+        [string]$DbName = "{{ ludus_scorch_db_name }}"
       )
       
-      $ErrorActionPreference = "Stop"
       $connectionString = "Server=$DbServer;Database=$DbName;Integrated Security=True;TrustServerCertificate=True"
       
       function Get-DbConnection {
@@ -91,16 +53,13 @@
         param(
           [System.Data.SqlClient.SqlConnection]$Connection,
           [string]$FolderPath,
-          [string]$RootParentId = '00000000-0000-0000-0000-000000000000'  # Runbooks root
+          [string]$RootParentId = '00000000-0000-0000-0000-000000000000'
         )
         
-        $folderParts = $FolderPath -split '\\'
+        $parts = $FolderPath.Split('\')
         $parentId = $RootParentId
         
-        foreach ($folderName in $folderParts) {
-          if ([string]::IsNullOrWhiteSpace($folderName)) { continue }
-          
-          # Check if folder exists
+        foreach ($folderName in $parts) {
           $cmd = $Connection.CreateCommand()
           $cmd.CommandText = "SELECT UniqueID FROM [dbo].[FOLDERS] WHERE Name = @Name AND ParentID = @ParentId AND Deleted = 0"
           $cmd.Parameters.AddWithValue("@Name", $folderName) | Out-Null
@@ -110,13 +69,12 @@
           if ($existingId) {
             $parentId = $existingId
           } else {
-            # Create folder
             $newId = [System.Guid]::NewGuid().ToString()
             $cmd = $Connection.CreateCommand()
             $cmd.CommandText = @"
               INSERT INTO [dbo].[FOLDERS] (UniqueID, ParentID, Name, Description, Deleted, LastModified)
               VALUES (@Id, @ParentId, @Name, '', 0, GETUTCDATE())
-      "@
+"@
             $cmd.Parameters.AddWithValue("@Id", $newId) | Out-Null
             $cmd.Parameters.AddWithValue("@ParentId", $parentId) | Out-Null
             $cmd.Parameters.AddWithValue("@Name", $folderName) | Out-Null
@@ -134,11 +92,9 @@
           [System.Data.SqlClient.SqlConnection]$Connection,
           [string]$Name,
           [string]$FolderPath,
-          [string]$Description = "",
-          [bool]$UsesCredentials = $false
+          [string]$Description = ""
         )
         
-        # Get or create folder
         $folderId = Get-OrCreateFolder -Connection $Connection -FolderPath $FolderPath
         
         # Check if runbook already exists
@@ -153,24 +109,167 @@
           return $existingId
         }
         
-        # Create runbook (policy)
         $runbookId = [System.Guid]::NewGuid().ToString()
         
         $cmd = $Connection.CreateCommand()
         $cmd.CommandText = @"
           INSERT INTO [dbo].[POLICIES] 
-          (UniqueID, ParentID, Name, Description, Deleted, LastModified, Version, Published)
+          (UniqueID, ParentID, Name, Description, CreationTime, CreatedBy, Enabled, Deleted, Published, MaxParallelRequests, Version, RunInPipelineMode)
           VALUES 
-          (@Id, @ParentId, @Name, @Description, 0, GETUTCDATE(), 1, 0)
-      "@
+          (@Id, @ParentId, @Name, @Description, GETUTCDATE(), 'SYSTEM', 1, 0, 0, 1, 1, 0)
+"@
         $cmd.Parameters.AddWithValue("@Id", $runbookId) | Out-Null
         $cmd.Parameters.AddWithValue("@ParentId", $folderId) | Out-Null
         $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
         $cmd.Parameters.AddWithValue("@Description", $Description) | Out-Null
         $cmd.ExecuteNonQuery() | Out-Null
         
-        Write-Output "Created runbook: $Name in $FolderPath"
+        Write-Output "Created runbook: $Name"
         return $runbookId
+      }
+      
+      function New-InitializeDataActivity {
+        param(
+          [System.Data.SqlClient.SqlConnection]$Connection,
+          [string]$RunbookId,
+          [string]$Name = "Initialize Data",
+          [int]$PositionX = 96,
+          [int]$PositionY = 77,
+          [hashtable[]]$Parameters
+        )
+        
+        $activityId = [System.Guid]::NewGuid().ToString()
+        $objectType = "6c576f3d-e927-417a-b145-5d3eff9c995f"  # Initialize Data type GUID
+        
+        # Insert into OBJECTS
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = @"
+          INSERT INTO [dbo].[OBJECTS]
+          (UniqueID, ParentID, Name, Description, PositionX, PositionY, ObjectType, Enabled, CreationTime, CreatedBy, Deleted, Number, ASW_NotifyOnFail, Flatten, FlatUseLineBreak, FlatUseCSV, FlatUseCustomSep, FlatCustomSep)
+          VALUES
+          (@Id, @ParentId, @Name, '', @PosX, @PosY, @ObjType, 1, GETUTCDATE(), 'SYSTEM', 0, 0, 0, 0, 0, 0, 1, ',')
+"@
+        $cmd.Parameters.AddWithValue("@Id", $activityId) | Out-Null
+        $cmd.Parameters.AddWithValue("@ParentId", $RunbookId) | Out-Null
+        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
+        $cmd.Parameters.AddWithValue("@PosX", $PositionX) | Out-Null
+        $cmd.Parameters.AddWithValue("@PosY", $PositionY) | Out-Null
+        $cmd.Parameters.AddWithValue("@ObjType", $objectType) | Out-Null
+        $cmd.ExecuteNonQuery() | Out-Null
+        
+        # Insert into CUSTOM_START (register Initialize Data)
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = "INSERT INTO [dbo].[CUSTOM_START] (UniqueID) VALUES (@Id)"
+        $cmd.Parameters.AddWithValue("@Id", $activityId) | Out-Null
+        $cmd.ExecuteNonQuery() | Out-Null
+        
+        # Insert parameters into CUSTOM_START_PARAMETERS
+        $parameterIds = @{}
+        foreach ($param in $Parameters) {
+          $paramId = [System.Guid]::NewGuid().ToString()
+          $cmd = $Connection.CreateCommand()
+          $cmd.CommandText = @"
+            INSERT INTO [dbo].[CUSTOM_START_PARAMETERS]
+            (UniqueID, ParentID, Value, Type, ParameterDescription, GroupID)
+            VALUES
+            (@Id, @ParentId, @Value, @Type, @Desc, NULL)
+"@
+          $cmd.Parameters.AddWithValue("@Id", $paramId) | Out-Null
+          $cmd.Parameters.AddWithValue("@ParentId", $activityId) | Out-Null
+          $cmd.Parameters.AddWithValue("@Value", $param.Name) | Out-Null
+          $cmd.Parameters.AddWithValue("@Type", $param.Type) | Out-Null
+          $cmd.Parameters.AddWithValue("@Desc", $param.Description) | Out-Null
+          $cmd.ExecuteNonQuery() | Out-Null
+          
+          $parameterIds[$param.Name] = $paramId
+        }
+        
+        Write-Output "Created Initialize Data activity with $($Parameters.Count) parameters"
+        return @{ ActivityId = $activityId; ParameterIds = $parameterIds }
+      }
+      
+      function New-RunDotNetScriptActivity {
+        param(
+          [System.Data.SqlClient.SqlConnection]$Connection,
+          [string]$RunbookId,
+          [string]$Name,
+          [string]$Description = "",
+          [int]$PositionX = 296,
+          [int]$PositionY = 77,
+          [string]$ScriptType = "PowerShell",
+          [string]$ScriptBody,
+          [int]$Number = 1
+        )
+        
+        $activityId = [System.Guid]::NewGuid().ToString()
+        $objectType = "ed7f2a41-107a-4b74-bafe-adae63632b79"  # Run .Net Script type GUID
+        
+        # Insert into OBJECTS
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = @"
+          INSERT INTO [dbo].[OBJECTS]
+          (UniqueID, ParentID, Name, Description, PositionX, PositionY, ObjectType, Enabled, CreationTime, CreatedBy, Deleted, Number, ASW_NotifyOnFail, Flatten, FlatUseLineBreak, FlatUseCSV, FlatUseCustomSep, FlatCustomSep)
+          VALUES
+          (@Id, @ParentId, @Name, @Desc, @PosX, @PosY, @ObjType, 1, GETUTCDATE(), 'SYSTEM', 0, @Num, 0, 0, 0, 0, 1, ',')
+"@
+        $cmd.Parameters.AddWithValue("@Id", $activityId) | Out-Null
+        $cmd.Parameters.AddWithValue("@ParentId", $RunbookId) | Out-Null
+        $cmd.Parameters.AddWithValue("@Name", $Name) | Out-Null
+        $cmd.Parameters.AddWithValue("@Desc", $Description) | Out-Null
+        $cmd.Parameters.AddWithValue("@PosX", $PositionX) | Out-Null
+        $cmd.Parameters.AddWithValue("@PosY", $PositionY) | Out-Null
+        $cmd.Parameters.AddWithValue("@ObjType", $objectType) | Out-Null
+        $cmd.Parameters.AddWithValue("@Num", $Number) | Out-Null
+        $cmd.ExecuteNonQuery() | Out-Null
+        
+        # Insert into RUNDOTNETSCRIPT
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = @"
+          INSERT INTO [dbo].[RUNDOTNETSCRIPT]
+          (UniqueID, ScriptType, ScriptBody, Dependencies, Namespaces, ExecutionData, PublishedData)
+          VALUES
+          (@Id, @Type, @Body, NULL, NULL, NULL, NULL)
+"@
+        $cmd.Parameters.AddWithValue("@Id", $activityId) | Out-Null
+        $cmd.Parameters.AddWithValue("@Type", $ScriptType) | Out-Null
+        $cmd.Parameters.AddWithValue("@Body", $ScriptBody) | Out-Null
+        $cmd.ExecuteNonQuery() | Out-Null
+        
+        Write-Output "Created Run .Net Script activity: $Name"
+        return $activityId
+      }
+      
+      function New-ActivityLink {
+        param(
+          [System.Data.SqlClient.SqlConnection]$Connection,
+          [string]$SourceActivityId,
+          [string]$TargetActivityId
+        )
+        
+        $linkId = [System.Guid]::NewGuid().ToString()
+        
+        $cmd = $Connection.CreateCommand()
+        $cmd.CommandText = @"
+          INSERT INTO [dbo].[LINKS]
+          (UniqueID, SourceObject, TargetObject, Color, WaitDelay, SubPoints, Label, Width)
+          VALUES
+          (@Id, @Source, @Target, 0, 0, NULL, NULL, NULL)
+"@
+        $cmd.Parameters.AddWithValue("@Id", $linkId) | Out-Null
+        $cmd.Parameters.AddWithValue("@Source", $SourceActivityId) | Out-Null
+        $cmd.Parameters.AddWithValue("@Target", $TargetActivityId) | Out-Null
+        $cmd.ExecuteNonQuery() | Out-Null
+        
+        return $linkId
+      }
+      
+      function Format-DataBusReference {
+        param(
+          [string]$ActivityId,
+          [string]$ParameterId
+        )
+        # Format: `d.T.~Ed/{ACTIVITY_GUID}.{PARAM_GUID}`d.T.~Ed/
+        return "``d.T.~Ed/{$ActivityId}.{$ParameterId}``d.T.~Ed/"
       }
       
       function New-Schedule {
@@ -182,12 +281,7 @@
           [string]$Day = "Monday"
         )
         
-        # SCHEDULES table uses bit flags for days and Hours/Days columns for time patterns
-        # Schema: UniqueID, DaysOfWeek, DaysOfMonth, Monday-Sunday (bits), First-Last (bits), Days, Hours, Exceptions
-        
         $scheduleId = [System.Guid]::NewGuid().ToString()
-        
-        # Set day bits based on pattern
         $monday = $tuesday = $wednesday = $thursday = $friday = $saturday = $sunday = 0
         $daysOfWeek = 0
         $hours = $Time
@@ -222,7 +316,7 @@
           (UniqueID, DaysOfWeek, DaysOfMonth, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday, Hours)
           VALUES 
           (@Id, @DaysOfWeek, 0, @Monday, @Tuesday, @Wednesday, @Thursday, @Friday, @Saturday, @Sunday, @Hours)
-      "@
+"@
         $cmd.Parameters.AddWithValue("@Id", $scheduleId) | Out-Null
         $cmd.Parameters.AddWithValue("@DaysOfWeek", $daysOfWeek) | Out-Null
         $cmd.Parameters.AddWithValue("@Monday", $monday) | Out-Null
@@ -239,29 +333,211 @@
         return $scheduleId
       }
       
-      function New-GlobalConfiguration {
-        param(
-          [System.Data.SqlClient.SqlConnection]$Connection,
-          [string]$Name,
-          [string]$Value,
-          [string]$Category = "Custom"
-        )
-        
-        # GLOBALCONFIGURATIONS table doesn't exist in SCORCH 2022
-        # Logging config values for visibility but not inserting to DB
-        Write-Output "Config (not stored - table N/A): $Category/$Name = $Value"
-        return $null
-      }
+      # ========================================
+      # Main execution - Create realistic runbooks
+      # ========================================
       
-      # Main execution
       $conn = Get-DbConnection
       
       try {
         Write-Output "=== Creating Runbook Infrastructure ==="
         Write-Output ""
         
-        # Will be populated by Ansible template
-        {{ ludus_scorch_runbook_creation_commands }}
+        # Create folder structure
+        {% for folder in ludus_scorch_runbook_folders %}
+        Get-OrCreateFolder -Connection $conn -FolderPath "{{ folder.name }}"
+        {% for subfolder in folder.subfolders | default([]) %}
+        Get-OrCreateFolder -Connection $conn -FolderPath "{{ folder.name }}\\{{ subfolder }}"
+        {% endfor %}
+        {% endfor %}
+        
+        # Create schedules
+        {% for schedule in ludus_scorch_schedules %}
+        New-Schedule -Connection $conn -Name "{{ schedule.name }}" -Pattern "{{ schedule.pattern }}"{% if schedule.time is defined %} -Time "{{ schedule.time }}"{% endif %}{% if schedule.day is defined %} -Day "{{ schedule.day }}"{% endif %}
+        {% endfor %}
+        
+        Write-Output ""
+        Write-Output "=== Creating Runbooks with Activities ==="
+        Write-Output ""
+        
+        # ========================================
+        # Runbook 1: Server Health Check
+        # ========================================
+        $rb1 = New-Runbook -Connection $conn -Name "Server Health Check" -FolderPath "IT Operations\\Server Management" -Description "Monitors server health using domain credentials"
+        
+        # Initialize Data with server and credential parameters
+        $init1 = New-InitializeDataActivity -Connection $conn -RunbookId $rb1 -Name "Initialize Data" -PositionX 96 -PositionY 77 -Parameters @(
+          @{ Name = "TargetServer"; Type = "String"; Description = "Server to check" },
+          @{ Name = "DomainCredential"; Type = "String"; Description = "Domain credential for remote access" }
+        )
+        
+        # Run .Net Script that references the parameters
+        $serverRef = Format-DataBusReference -ActivityId $init1.ActivityId -ParameterId $init1.ParameterIds["TargetServer"]
+        $credRef = Format-DataBusReference -ActivityId $init1.ActivityId -ParameterId $init1.ParameterIds["DomainCredential"]
+        
+        $script1 = @"
+        # Server Health Check Script
+        # Uses domain credentials to remotely check server health
+        
+        `$targetServer = $serverRef
+        `$credential = $credRef
+        
+        # Create credential object (password from SCORCH variable)
+        `$securePass = ConvertTo-SecureString `$credential -AsPlainText -Force
+        `$cred = New-Object PSCredential("{{ ludus_domain_netbios_name | default('SCORCH') }}\\domainadmin", `$securePass)
+        
+        # Remote health check
+        `$session = New-PSSession -ComputerName `$targetServer -Credential `$cred
+        `$health = Invoke-Command -Session $session -ScriptBlock {
+            @{
+                CPU = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
+                Memory = (Get-Counter '\Memory\% Committed Bytes In Use').CounterSamples.CookedValue
+                Services = (Get-Service | Where-Object Status -eq 'Running').Count
+            }
+        }
+        Remove-PSSession `$session
+        `$health | ConvertTo-Json
+"@
+        $script1Id = New-RunDotNetScriptActivity -Connection $conn -RunbookId $rb1 -Name "Check Server Health" -Description "Remote health check using domain credentials" -PositionX 296 -PositionY 77 -ScriptBody $script1 -Number 1
+        
+        # Link activities
+        New-ActivityLink -Connection $conn -SourceActivityId $init1.ActivityId -TargetActivityId $script1Id
+        
+        # ========================================
+        # Runbook 2: SQL Database Backup
+        # ========================================
+        $rb2 = New-Runbook -Connection $conn -Name "SQL Database Backup" -FolderPath "IT Operations\\Backup Operations" -Description "Backup SQL databases using service account"
+        
+        $init2 = New-InitializeDataActivity -Connection $conn -RunbookId $rb2 -Name "Initialize Data" -PositionX 96 -PositionY 77 -Parameters @(
+          @{ Name = "SQLServer"; Type = "String"; Description = "SQL Server instance" },
+          @{ Name = "DatabaseName"; Type = "String"; Description = "Database to backup" },
+          @{ Name = "SQLServicePassword"; Type = "String"; Description = "SQL service account password" }
+        )
+        
+        $sqlServerRef = Format-DataBusReference -ActivityId $init2.ActivityId -ParameterId $init2.ParameterIds["SQLServer"]
+        $dbNameRef = Format-DataBusReference -ActivityId $init2.ActivityId -ParameterId $init2.ParameterIds["DatabaseName"]
+        $sqlPassRef = Format-DataBusReference -ActivityId $init2.ActivityId -ParameterId $init2.ParameterIds["SQLServicePassword"]
+        
+        $script2 = @"
+        # SQL Database Backup Script
+        # Uses SQL service account credentials
+        
+        `$sqlServer = $sqlServerRef
+        `$database = $dbNameRef
+        `$password = $sqlPassRef
+        
+        `$backupPath = "C:\Backups\`$database_`$(Get-Date -Format 'yyyyMMdd_HHmmss').bak"
+        
+        # Connection with service account
+        `$connString = "Server=`$sqlServer;Database=master;User ID=svc_sql_backup;Password=`$password"
+        
+        `$query = "BACKUP DATABASE [`$database] TO DISK = N'`$backupPath' WITH FORMAT, COMPRESSION"
+        Invoke-Sqlcmd -ConnectionString `$connString -Query `$query -QueryTimeout 3600
+        
+        Write-Output "Backup completed: `$backupPath"
+"@
+        $script2Id = New-RunDotNetScriptActivity -Connection $conn -RunbookId $rb2 -Name "Execute SQL Backup" -Description "Run backup using service credentials" -PositionX 296 -PositionY 77 -ScriptBody $script2 -Number 1
+        
+        New-ActivityLink -Connection $conn -SourceActivityId $init2.ActivityId -TargetActivityId $script2Id
+        
+        # ========================================
+        # Runbook 3: Azure VM Management
+        # ========================================
+        $rb3 = New-Runbook -Connection $conn -Name "Start Azure VMs" -FolderPath "Cloud\\Azure" -Description "Start Azure VMs using service principal"
+        
+        $init3 = New-InitializeDataActivity -Connection $conn -RunbookId $rb3 -Name "Initialize Data" -PositionX 96 -PositionY 77 -Parameters @(
+          @{ Name = "ResourceGroup"; Type = "String"; Description = "Azure resource group" },
+          @{ Name = "TenantId"; Type = "String"; Description = "Azure tenant ID" },
+          @{ Name = "ClientId"; Type = "String"; Description = "Service principal client ID" },
+          @{ Name = "ClientSecret"; Type = "String"; Description = "Service principal secret" }
+        )
+        
+        $rgRef = Format-DataBusReference -ActivityId $init3.ActivityId -ParameterId $init3.ParameterIds["ResourceGroup"]
+        $tenantRef = Format-DataBusReference -ActivityId $init3.ActivityId -ParameterId $init3.ParameterIds["TenantId"]
+        $clientIdRef = Format-DataBusReference -ActivityId $init3.ActivityId -ParameterId $init3.ParameterIds["ClientId"]
+        $secretRef = Format-DataBusReference -ActivityId $init3.ActivityId -ParameterId $init3.ParameterIds["ClientSecret"]
+        
+        $script3 = @"
+        # Azure VM Start Script
+        # Uses service principal with client secret
+        
+        `$resourceGroup = $rgRef
+        `$tenantId = $tenantRef
+        `$clientId = $clientIdRef
+        `$clientSecret = $secretRef
+        
+        # Create credential and connect
+        `$secureSecret = ConvertTo-SecureString `$clientSecret -AsPlainText -Force
+        `$credential = New-Object PSCredential(`$clientId, `$secureSecret)
+        
+        Connect-AzAccount -ServicePrincipal -Credential `$credential -Tenant `$tenantId
+        
+        # Start all VMs in resource group
+        Get-AzVM -ResourceGroupName `$resourceGroup | ForEach-Object {
+            Write-Output "Starting VM: `$(`$_.Name)"
+            Start-AzVM -ResourceGroupName `$resourceGroup -Name `$_.Name -NoWait
+        }
+        
+        Disconnect-AzAccount
+"@
+        $script3Id = New-RunDotNetScriptActivity -Connection $conn -RunbookId $rb3 -Name "Start VMs with Service Principal" -Description "Azure authentication using client secret" -PositionX 296 -PositionY 77 -ScriptBody $script3 -Number 1
+        
+        New-ActivityLink -Connection $conn -SourceActivityId $init3.ActivityId -TargetActivityId $script3Id
+        
+        # ========================================
+        # Runbook 4: ServiceNow Integration
+        # ========================================
+        $rb4 = New-Runbook -Connection $conn -Name "Create ServiceNow Ticket" -FolderPath "Integration\\ServiceNow" -Description "Create incident tickets using API credentials"
+        
+        $init4 = New-InitializeDataActivity -Connection $conn -RunbookId $rb4 -Name "Initialize Data" -PositionX 96 -PositionY 77 -Parameters @(
+          @{ Name = "InstanceUrl"; Type = "String"; Description = "ServiceNow instance URL" },
+          @{ Name = "APIUsername"; Type = "String"; Description = "API service account" },
+          @{ Name = "APIPassword"; Type = "String"; Description = "API service account password" },
+          @{ Name = "IncidentSummary"; Type = "String"; Description = "Incident description" }
+        )
+        
+        $instanceRef = Format-DataBusReference -ActivityId $init4.ActivityId -ParameterId $init4.ParameterIds["InstanceUrl"]
+        $apiUserRef = Format-DataBusReference -ActivityId $init4.ActivityId -ParameterId $init4.ParameterIds["APIUsername"]
+        $apiPassRef = Format-DataBusReference -ActivityId $init4.ActivityId -ParameterId $init4.ParameterIds["APIPassword"]
+        $summaryRef = Format-DataBusReference -ActivityId $init4.ActivityId -ParameterId $init4.ParameterIds["IncidentSummary"]
+        
+        $script4 = @"
+        # ServiceNow Ticket Creation
+        # Uses API credentials for REST authentication
+        
+        `$instanceUrl = $instanceRef
+        `$username = $apiUserRef
+        `$password = $apiPassRef
+        `$summary = $summaryRef
+        
+        # Create auth header
+        `$base64Auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("`$username`:`$password"))
+        `$headers = @{
+            "Authorization" = "Basic `$base64Auth"
+            "Content-Type" = "application/json"
+        }
+        
+        # Create incident
+        `$body = @{
+            short_description = `$summary
+            category = "software"
+            urgency = 2
+            impact = 2
+        } | ConvertTo-Json
+        
+        `$response = Invoke-RestMethod -Uri "`$instanceUrl/api/now/table/incident" -Method Post -Headers `$headers -Body `$body
+        Write-Output "Created incident: `$(`$response.result.number)"
+"@
+        $script4Id = New-RunDotNetScriptActivity -Connection $conn -RunbookId $rb4 -Name "Create Incident via API" -Description "REST call with Basic auth credentials" -PositionX 296 -PositionY 77 -ScriptBody $script4 -Number 1
+        
+        New-ActivityLink -Connection $conn -SourceActivityId $init4.ActivityId -TargetActivityId $script4Id
+        
+        # Create remaining runbook shells (without activities for simplicity)
+        {% for runbook in ludus_scorch_sample_runbooks %}
+        {% if runbook.name not in ['Server Health Check', 'SQL Database Backup', 'Start Azure VMs', 'Create ServiceNow Ticket'] %}
+        New-Runbook -Connection $conn -Name "{{ runbook.name }}" -FolderPath "{{ runbook.folder }}" -Description "{{ runbook.description }}"
+        {% endif %}
+        {% endfor %}
         
         Write-Output ""
         Write-Output "=== Runbook Infrastructure Created ==="
@@ -269,17 +545,7 @@
       } finally {
         $conn.Close()
       }
-    dest: "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\Create-Runbooks.ps1"
-
-- name: Update script with runbook commands
-  ansible.windows.win_shell: |
-    $scriptPath = "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\Create-Runbooks.ps1"
-    $content = Get-Content $scriptPath -Raw
-    $commands = @'
-    {{ ludus_scorch_runbook_creation_commands }}
-    '@
-    $content = $content -replace '\{\{ ludus_scorch_runbook_creation_commands \}\}', $commands
-    Set-Content -Path $scriptPath -Value $content
+    dest: "{{ ludus_scorch_temp_dir | default('C:\\ludus_scorch_temp') }}\\Create-Runbooks.ps1"
   when: ludus_scorch_create_default_runbooks
   become: true
   become_method: runas
@@ -289,7 +555,7 @@
 
 - name: Execute runbook creation script
   ansible.windows.win_shell: |
-    & "{{ ludus_scorch_temp_dir | default('C:\\\\ludus_scorch_temp') }}\\Create-Runbooks.ps1"
+    & "{{ ludus_scorch_temp_dir | default('C:\\ludus_scorch_temp') }}\\Create-Runbooks.ps1"
   register: runbook_creation
   when: ludus_scorch_create_default_runbooks
   become: true
@@ -303,7 +569,7 @@
     msg: "{{ runbook_creation.stdout_lines }}"
   when: runbook_creation.stdout_lines is defined
 
-- name: Count created runbooks
+- name: Count created runbooks and activities
   ansible.windows.win_shell: |
     $conn = New-Object System.Data.SqlClient.SqlConnection
     $conn.ConnectionString = "Server={{ ludus_scorch_db_connection }};Database={{ ludus_scorch_db_name }};Integrated Security=True;TrustServerCertificate=True"
@@ -314,16 +580,20 @@
       SELECT 
         (SELECT COUNT(*) FROM [dbo].[FOLDERS] WHERE Deleted = 0) as Folders,
         (SELECT COUNT(*) FROM [dbo].[POLICIES] WHERE Deleted = 0) as Runbooks,
-        (SELECT COUNT(*) FROM [dbo].[SCHEDULES] WHERE Deleted = 0) as Schedules,
-        (SELECT COUNT(*) FROM [dbo].[GLOBALCONFIGURATIONS] WHERE Deleted = 0) as Configs
-    "@
+        (SELECT COUNT(*) FROM [dbo].[OBJECTS] WHERE Deleted = 0 AND ObjectType = '6c576f3d-e927-417a-b145-5d3eff9c995f') as InitDataActivities,
+        (SELECT COUNT(*) FROM [dbo].[OBJECTS] WHERE Deleted = 0 AND ObjectType = 'ed7f2a41-107a-4b74-bafe-adae63632b79') as ScriptActivities,
+        (SELECT COUNT(*) FROM [dbo].[LINKS]) as Links,
+        (SELECT COUNT(*) FROM [dbo].[SCHEDULES]) as Schedules
+"@
     
     $reader = $cmd.ExecuteReader()
     if ($reader.Read()) {
       Write-Output "Folders: $($reader['Folders'])"
       Write-Output "Runbooks: $($reader['Runbooks'])"
+      Write-Output "Initialize Data Activities: $($reader['InitDataActivities'])"
+      Write-Output "Script Activities: $($reader['ScriptActivities'])"
+      Write-Output "Links: $($reader['Links'])"
       Write-Output "Schedules: $($reader['Schedules'])"
-      Write-Output "Global Configs: $($reader['Configs'])"
     }
     $reader.Close()
     $conn.Close()
