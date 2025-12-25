@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: install_integration_packs
+  author: professor-moody
+  description: Install SCORCH Integration Packs and configure connections with credentials
+  license: GPL-3.0
+  min_ansible_version: "2.10"
+  platforms:
+    - name: Windows
+      versions:
+        - "2019"
+        - "2022"
+  galaxy_tags:
+    - scorch
+    - orchestrator
+    - windows
+    - integration_packs
+    - security_testing
+
+dependencies:
+  - role: professor_moody.ludus_scorch.install_mgmt_server

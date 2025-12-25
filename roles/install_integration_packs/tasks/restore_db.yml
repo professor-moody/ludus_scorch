@@ -1,0 +1,65 @@
+---
+# Restore pre-configured Orchestrator database with IPs already installed
+# This is the cleanest automation approach for repeatable deployments
+
+- name: Check if backup file exists
+  ansible.windows.win_stat:
+    path: "{{ ludus_scorch_preconfigured_db }}"
+  register: backup_file
+  delegate_to: "{{ ludus_scorch_db_server }}"
+
+- name: Fail if backup file not found
+  ansible.builtin.fail:
+    msg: "Pre-configured database backup not found: {{ ludus_scorch_preconfigured_db }}"
+  when: not backup_file.stat.exists
+
+- name: Stop SCORCH services before restore
+  ansible.windows.win_service:
+    name: "{{ item }}"
+    state: stopped
+  loop:
+    - "Orchestrator Runbook Service"
+    - "Orchestrator Management Service"
+  failed_when: false
+
+- name: Restore Orchestrator database from backup
+  ansible.windows.win_shell: |
+    $backupPath = "{{ ludus_scorch_preconfigured_db }}"
+    $dbName = "{{ ludus_scorch_db_name }}"
+    $server = "{{ ludus_scorch_db_server }}"
+    
+    Write-Host "Restoring $dbName from $backupPath"
+    
+    $restoreQuery = @"
+    USE master;
+    ALTER DATABASE [$dbName] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    RESTORE DATABASE [$dbName] FROM DISK = N'$backupPath' WITH REPLACE;
+    ALTER DATABASE [$dbName] SET MULTI_USER;
+    "@
+    
+    try {
+        Invoke-Sqlcmd -ServerInstance $server -Query $restoreQuery -QueryTimeout 600
+        Write-Host "Database restored successfully"
+    } catch {
+        Write-Host "Restore failed: $_"
+        exit 1
+    }
+  delegate_to: "{{ ludus_scorch_db_server }}"
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: '{{ ludus_domain_fqdn }}\{{ defaults.ad_domain_admin }}'
+    ansible_become_password: '{{ defaults.ad_domain_admin_password }}'
+    ansible_become_flags: "logon_type=interactive logon_flags=with_profile"
+
+- name: Start SCORCH services after restore
+  ansible.windows.win_service:
+    name: "{{ item }}"
+    state: started
+  loop:
+    - "Orchestrator Management Service"
+    - "Orchestrator Runbook Service"
+
+- name: Display restore completion
+  ansible.builtin.debug:
+    msg: "Pre-configured database restored. Integration Packs should be available."

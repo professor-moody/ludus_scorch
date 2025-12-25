@@ -1,0 +1,198 @@
+---
+# Download SCORCH Integration Packs and provide manual installation instructions
+#
+# NOTE: There is NO supported CLI method to install Integration Packs in SCO 2022.
+# This role downloads the OIP files and leaves instructions for manual installation
+# via Deployment Manager GUI.
+#
+# For fully automated deployments, use the database restore option with a
+# pre-configured backup that includes IPs already installed.
+
+- name: Set computed variables
+  ansible.builtin.set_fact:
+    ludus_scorch_enabled_ips: "{{ ludus_scorch_integration_packs | selectattr('enabled', 'true') | list }}"
+
+- name: Create Integration Packs download directory
+  ansible.windows.win_file:
+    path: "{{ ludus_scorch_ip_download_dir }}"
+    state: directory
+
+- name: Display enabled Integration Packs
+  ansible.builtin.debug:
+    msg: "Will download {{ ludus_scorch_enabled_ips | length }} Integration Pack(s): {{ ludus_scorch_enabled_ips | map(attribute='name') | list | join(', ') }}"
+
+# Download Integration Packs
+- name: Download Integration Packs from Microsoft
+  ansible.windows.win_shell: |
+    $downloadId = "{{ item.download_id }}"
+    $ipName = "{{ item.name }}"
+    $destDir = "{{ ludus_scorch_ip_download_dir }}"
+    
+    # Microsoft Download Center page
+    $downloadPage = "https://www.microsoft.com/en-us/download/details.aspx?id=$downloadId"
+    
+    Write-Host "Downloading: $ipName (ID: $downloadId)"
+    Write-Host "Download page: $downloadPage"
+    
+    # Note: Microsoft doesn't provide stable direct download URLs
+    # Users may need to download manually if this fails
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        
+        # Try to access download page and extract actual download link
+        # This is fragile and may break - manual download is the fallback
+        $response = Invoke-WebRequest -Uri $downloadPage -UseBasicParsing -ErrorAction Stop
+        
+        # Look for download link pattern
+        $downloadLinks = $response.Links | Where-Object { $_.href -match "download\.microsoft\.com.*\.exe$" }
+        
+        if ($downloadLinks) {
+            $actualUrl = $downloadLinks[0].href
+            $filename = Split-Path $actualUrl -Leaf
+            $destPath = Join-Path $destDir $filename
+            
+            if (!(Test-Path $destPath)) {
+                Invoke-WebRequest -Uri $actualUrl -OutFile $destPath -UseBasicParsing
+                Write-Host "Downloaded: $filename"
+            } else {
+                Write-Host "Already exists: $filename"
+            }
+        } else {
+            Write-Host "Could not find download link - manual download required"
+            Write-Host "Please download from: $downloadPage"
+        }
+    } catch {
+        Write-Host "Download failed: $_"
+        Write-Host "Please download manually from: $downloadPage"
+    }
+  loop: "{{ ludus_scorch_enabled_ips }}"
+  register: ip_download_result
+  failed_when: false
+  changed_when: "'Downloaded:' in ip_download_result.stdout"
+
+# Check what was downloaded
+- name: Find downloaded IP files
+  ansible.windows.win_find:
+    paths: "{{ ludus_scorch_ip_download_dir }}"
+    patterns: "*.exe,*.oip"
+  register: downloaded_ips
+
+- name: Display download results
+  ansible.builtin.debug:
+    msg: "Found {{ downloaded_ips.matched }} IP file(s) in {{ ludus_scorch_ip_download_dir }}"
+
+# Create manual installation guide
+- name: Create manual installation instructions
+  ansible.windows.win_copy:
+    content: |
+      ================================================================================
+      SCORCH Integration Pack Installation Guide
+      ================================================================================
+      
+      Integration Packs require MANUAL installation via the Deployment Manager GUI.
+      There is no supported command-line method for SCO 2022.
+      
+      Downloaded IPs are located in: {{ ludus_scorch_ip_download_dir }}
+      
+      --------------------------------------------------------------------------------
+      STEP 1: Extract the Integration Pack
+      --------------------------------------------------------------------------------
+      
+      Each downloaded .exe is a self-extracting archive:
+      
+        1. Double-click the .exe file (e.g., SC2022_AD_IP.exe)
+        2. Choose extraction path (e.g., C:\IntegrationPacks\AD_Extracted)
+        3. Click Extract
+        4. The .oip file will be in the extracted folder
+      
+      Or via PowerShell:
+        Start-Process "C:\IntegrationPacks\SC2022_AD_IP.exe" -ArgumentList "/extract:C:\IntegrationPacks\AD" -Wait
+      
+      --------------------------------------------------------------------------------
+      STEP 2: Register IP with Management Server
+      --------------------------------------------------------------------------------
+      
+        1. Open "Orchestrator Deployment Manager" from Start Menu
+        2. Connect to Management Server: SCORCH-MGMT
+        3. Right-click "Integration Packs" -> "Register IP with the Management Server"
+        4. Browse to the extracted .oip file
+        5. Accept EULA if prompted
+        6. Wait for registration to complete
+      
+      --------------------------------------------------------------------------------
+      STEP 3: Deploy IP to Runbook Servers
+      --------------------------------------------------------------------------------
+      
+        1. In Deployment Manager, expand "Integration Packs"
+        2. Right-click the registered IP -> "Deploy IP to Runbook Server or Runbook Designer"
+        3. Select target servers:
+           - SCORCH-MGMT (Management Server)
+           - Any additional Runbook Servers
+        4. Click Next and wait for deployment
+      
+      --------------------------------------------------------------------------------
+      STEP 4: Configure IP Connections (Credentials)
+      --------------------------------------------------------------------------------
+      
+        1. Open "Runbook Designer" 
+        2. Menu: Options -> [Integration Pack Name]
+        3. Click "Add" on the Configurations tab
+        4. Enter connection details with credentials
+        5. Click OK -> Finish
+      
+      Suggested test credentials for security lab:
+      
+      {% for cred in ludus_scorch_ip_test_credentials %}
+      {{ cred.ip_name }}:
+        Connection Name: {{ cred.connection_name }}
+      {% if cred.domain_controller is defined %}
+        Domain Controller: {{ cred.domain_controller }}
+        Username: {{ cred.username }}
+        Password: {{ cred.password }}
+      {% elif cred.base_url is defined %}
+        Base URL: {{ cred.base_url }}
+        Auth Type: {{ cred.auth_type }}
+        Token: {{ cred.token }}
+      {% endif %}
+      
+      {% endfor %}
+      --------------------------------------------------------------------------------
+      STEP 5: Restart Services
+      --------------------------------------------------------------------------------
+      
+      After deploying IPs, restart SCORCH services:
+      
+        Restart-Service "Orchestrator Runbook Service"
+        Restart-Service "Orchestrator Management Service"
+      
+      --------------------------------------------------------------------------------
+      STEP 6: Verify Installation
+      --------------------------------------------------------------------------------
+      
+      In Runbook Designer, check the Activities pane for new IP activities.
+      
+      Test credential extraction with scorch tool:
+        ./scorch dump -t SCORCH-SQL -db Orchestrator -d SCORCH -u domainadmin -p password -ip-summary
+      
+      ================================================================================
+      For automation, consider backing up the Orchestrator database after manual
+      IP configuration and using the restore option in future deployments.
+      ================================================================================
+    dest: "{{ ludus_scorch_ip_download_dir }}\\INSTALL_INSTRUCTIONS.txt"
+
+# Optional: Restore pre-configured database
+- name: Restore pre-configured database (if specified)
+  ansible.builtin.include_tasks: restore_db.yml
+  when: ludus_scorch_preconfigured_db | length > 0
+
+- name: Display completion message
+  ansible.builtin.debug:
+    msg: |
+      ============================================================
+      Integration Pack files downloaded to: {{ ludus_scorch_ip_download_dir }}
+      
+      MANUAL INSTALLATION REQUIRED - See:
+      {{ ludus_scorch_ip_download_dir }}\INSTALL_INSTRUCTIONS.txt
+      
+      Or RDP to SCORCH-MGMT and open Deployment Manager.
+      ============================================================

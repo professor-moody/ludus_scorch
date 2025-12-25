@@ -1,0 +1,63 @@
+---
+# Default variables for install_integration_packs role
+# This role downloads IP files and provides instructions - installation is manual
+
+# Integration Packs to download
+# Download IDs from: https://learn.microsoft.com/en-us/system-center/orchestrator/list-of-orchestrator-integration-packs
+ludus_scorch_integration_packs:
+  - name: "Active Directory"
+    download_id: "104333"
+    enabled: true
+  - name: "REST"
+    download_id: "104337"
+    enabled: true
+  - name: "Operations Manager"
+    download_id: "104339"
+    enabled: false
+  - name: "Configuration Manager"
+    download_id: "104338"
+    enabled: false
+  - name: "Virtual Machine Manager"
+    download_id: "104340"
+    enabled: false
+  - name: "Service Manager"
+    download_id: "104341"
+    enabled: false
+  - name: "Data Protection Manager"
+    download_id: "104334"
+    enabled: false
+  - name: "Exchange Admin"
+    download_id: "104335"
+    enabled: false
+  - name: "SharePoint"
+    download_id: "104332"
+    enabled: false
+  - name: "VMware vSphere"
+    download_id: "106163"
+    enabled: false
+
+# Directory for IP downloads
+ludus_scorch_ip_download_dir: "C:\\IntegrationPacks"
+
+# Optional: Restore pre-configured database with IPs already installed
+# Set to path of .bak file (must be accessible from SQL server)
+ludus_scorch_preconfigured_db: ""
+# ludus_scorch_preconfigured_db: "C:\\Backups\\Orchestrator_with_IPs.bak"
+
+# Test credentials to configure (for documentation/reference only)
+# These are not auto-configured - manual setup required in Runbook Designer
+ludus_scorch_ip_test_credentials:
+  - ip_name: "Active Directory"
+    connection_name: "Corp AD Connection"
+    domain_controller: "DC01.{{ ludus_domain_fqdn | default('scorch.ludus.domain') }}"
+    username: "{{ ludus_domain_netbios_name | default('SCORCH') }}\\svc_ad_automation"
+    password: "ADAutomationP@ss123!"
+  - ip_name: "REST"
+    connection_name: "Internal API"
+    base_url: "https://api.internal.corp"
+    auth_type: "Bearer"
+    token: "eyJhbGciOiJIUzI1NiJ9.SAMPLE_API_TOKEN"
+
+# Database connection (for restore option)
+ludus_scorch_db_server: "SCORCH-SQL"
+ludus_scorch_db_name: "Orchestrator"
